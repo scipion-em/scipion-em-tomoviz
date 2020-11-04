@@ -1,2 +1,6 @@
 scipion-pyworkflow
 scipion-em
+scipion-em-tomo
+pyvista
+pyvistaqt
+PyQt5

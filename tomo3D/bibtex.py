@@ -1,8 +1,9 @@
+# -*- coding: utf-8 -*-
 # **************************************************************************
 # *
-# * Authors:     you (you@yourinstitution.email)
+# * Authors:     David Herreros Calero (dherreros@cnb.csic.es)
 # *
-# * your institution
+# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -24,11 +25,19 @@
 # *
 # **************************************************************************
 
-import pwem
+"""
+@article{you2019,
+title = "Title of your paper ",
+journal = "...",
+volume = "...",
+number = ".",
+pages = "1 - 6",
+year = "2019",
+issn = "0000-1111",
+doi = "http://dx.doi.org/xxxxx/xxxxx",
+url = "http://www.url",
+author = "you and your team",
+keywords = "Single particle analysis Tomography",
+}
 
-_logo = "icon.png"
-_references = ['you2019']
-
-
-class Plugin(pwem.Plugin):
-    pass
+"""
