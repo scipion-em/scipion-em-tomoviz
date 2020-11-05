@@ -60,9 +60,11 @@ class Tomo3DDataViewer(pwviewer.Viewer):
             outputCoords = obj
 
             tomos = outputCoords.getPrecedents()
-            tomoNames = {pwutils.removeBaseExt(coord.getVolume().getFileName()) for coord in outputCoords.iterCoordinates()}
-            tomoList = [tomo.clone() for tomo in tomos.iterItems() if 
-                        pwutils.removeBaseExt(tomo.getFileName()) in tomoNames]
+
+            volIds = outputCoords.aggregate(["MAX"], "_volId", ["_volId"])
+            volIds = [d['_volId'] for d in volIds]
+
+            tomoList = [tomos[objId] for objId in volIds]
             tomoProvider = Tomo3DTreeProvider(tomoList)
 
             vesicles_dict = extractVesicles(outputCoords)
