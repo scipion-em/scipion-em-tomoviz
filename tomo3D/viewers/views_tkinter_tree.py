@@ -24,13 +24,11 @@
 # *
 # **************************************************************************
 
-from multiprocessing import Process
-
 from pyworkflow import utils as pwutils
 from pyworkflow.gui.dialog import ToolbarListDialog
 from pyworkflow.gui.tree import TreeProvider
 
-from .viewer_triangulations import TriangulationPlot
+from .viewer_triangulations import TriangulationPlot, guiThread
 from ..utils import delaunayTriangulation
 
 class Tomo3DTreeProvider(TreeProvider):
@@ -85,15 +83,14 @@ class Tomo3DDialog(ToolbarListDialog):
 
     def doubleClickOnTomogram(self, e=None):
         self.tomo = e
-        self.proc = Process(target=createViewer, args=(self.tomo, self.vesicles_dict))
-        self.proc.start()
-
-def createViewer(tomo, vesicles_dict):
-    tomoName = pwutils.removeBaseExt(tomo.getFileName())
-    normals = vesicles_dict[tomoName]['normals']
-    vesicles = vesicles_dict[tomoName]['vesicles']
-    shells = []
-    for vesicle in vesicles:
-        shells.append(delaunayTriangulation(vesicle))
-    plt = TriangulationPlot(shells, clouds=vesicles, extNormals_List=normals)
-    plt.initializePlot()
+        self.createViewer()
+    
+    def createViewer(self):
+        tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        normals = self.vesicles_dict[tomoName]['normals']
+        vesicles = self.vesicles_dict[tomoName]['vesicles']
+        shells = []
+        for vesicle in vesicles:
+            shells.append(delaunayTriangulation(vesicle))
+        classArgs = {'meshes': shells, 'clouds': vesicles, 'extNormals_List': normals}
+        guiThread(TriangulationPlot, 'initializePlot', **classArgs)
