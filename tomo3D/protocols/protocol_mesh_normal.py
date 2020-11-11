@@ -82,7 +82,6 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         self.outSet = self._createSetOfSubTomograms()
         self.outSet.copyInfo(self.inputSubtomos.get())
         tol = self.tol.get()*np.pi/180
-        print('tol', tol)
         for subtomo in self.inputSubtomos.get():
             for mesh in self.inputMeshes.get().iterItems():
                 pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
