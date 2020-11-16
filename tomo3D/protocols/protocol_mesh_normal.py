@@ -98,11 +98,11 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         self._defineSourceRelation(self.inputSubtomos.get(), self.outSet)
 
     # --------------------------- INFO functions --------------------------------
-    def _validate(self):
-        validateMsgs = []
-        if not self.inputMeshes.get().getFirstItem().hasDescription():
-            validateMsgs.append('Vesicles not adjusted, please use protocol "fit vesicles" previously')
-        return validateMsgs
+    # def _validate(self):
+    #     validateMsgs = []
+    #     if not self.inputMeshes.get().getFirstItem().hasDescription():
+    #         validateMsgs.append('Vesicles not adjusted, please use protocol "fit vesicles" previously')
+    #     return validateMsgs
 
     def _summary(self):
         summary = []
@@ -163,8 +163,4 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         points, normals = zip(*normalsList)
         points = np.asarray(points)
         idx = np.argmin(np.sum((points - coors) ** 2, axis=1))
-        # print('---coord---', coors)
-        # print('---point---', points[idx])
-        # print('---normalS---', normSubtomo)
-        # print('---normalV---', normals[idx])
         return normSubtomo, normals[idx]
