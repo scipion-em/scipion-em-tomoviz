@@ -31,6 +31,8 @@ from pyworkflow.gui.tree import TreeProvider
 from .viewer_triangulations import TriangulationPlot, guiThread
 from ..utils import delaunayTriangulation
 
+from tomo.utils import extractVesicles, initDictVesicles
+
 class Tomo3DTreeProvider(TreeProvider):
     """ Populate Tree from SetOfTomograms. """
 
@@ -72,8 +74,9 @@ class Tomo3DDialog(ToolbarListDialog):
     a pyvista viewer subprocess from a list of Tomograms.
     """
 
-    def __init__(self, parent, vesicles_dict, **kwargs):
-        self.vesicles_dict = vesicles_dict
+    def __init__(self, parent, coordinates, **kwargs):
+        self.dictVesicles, _ = initDictVesicles(coordinates)
+        self.coordinates = coordinates
         self.provider = kwargs.get("provider", None)
         ToolbarListDialog.__init__(self, parent,
                                    "Tomogram List",
@@ -83,12 +86,14 @@ class Tomo3DDialog(ToolbarListDialog):
 
     def doubleClickOnTomogram(self, e=None):
         self.tomo = e
+        tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        self.dictVesicles = extractVesicles(self.coordinates, self.dictVesicles, tomoName)
         self.createViewer()
-    
+
     def createViewer(self):
         tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
-        normals = self.vesicles_dict[tomoName]['normals']
-        vesicles = self.vesicles_dict[tomoName]['vesicles']
+        normals = self.dictVesicles[tomoName]['normals']
+        vesicles = self.dictVesicles[tomoName]['vesicles']
         shells = []
         for vesicle in vesicles:
             shells.append(delaunayTriangulation(vesicle))

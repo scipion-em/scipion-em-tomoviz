@@ -97,7 +97,6 @@ def computeNormals(triangulation, associateCoords=False):
         points = np.delete(points, areZero, axis=0)
         ngNormals = np.asarray([np.argmin(np.linalg.norm(points - point, axis=1))
                                 for point in redundant])
-        print(areZero, ngNormals)
         normals[areZero] = normals[ngNormals]
 
     if associateCoords:
