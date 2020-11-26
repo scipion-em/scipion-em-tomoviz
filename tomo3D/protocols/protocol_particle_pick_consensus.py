@@ -37,7 +37,7 @@ import numpy as np
 from pyworkflow.object import Set, Pointer
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol.constants import *
-from pyworkflow.utils import getFiles, removeBaseExt, moveFile
+from pyworkflow.utils import getFiles, removeBaseExt, moveFile, removeExt
 
 from ..utils import rotation_matrix_from_vectors, delaunayTriangulation, computeNormals
 
@@ -197,23 +197,29 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
             outSet = self._loadOutputSet(SetOfCoordinates3D, 'coordinates.sqlite')
 
             for fnTmp in newFiles:
+                if '_vIds' in fnTmp:
+                    continue
                 coords = np.loadtxt(fnTmp)
-                shell = delaunayTriangulation(coords)
-                normals = computeNormals(shell)
+                vsIds = np.loadtxt(removeExt(fnTmp) + '_vIds.txt')
                 moveFile(fnTmp, self._getExtraPath())
-                if coords.size == 3:  # special case with only one coordinate
-                    coords = [coords]
-                for idx, coord in enumerate(coords):
-                    newCoord = Coordinate3D()
-                    tomograms = self.getMainInput().getPrecedents()
-                    newCoord.setVolume(tomograms[self.getTomoId(fnTmp)])
-                    newCoord.setPosition(coord[0], coord[1], coord[2])
-                    matrix = rotation_matrix_from_vectors(normals[idx], np.array([0, 0, 1]))
-                    if isinstance(self.inputCoordinates, list):
-                        newCoord.setMatrix(matrix)
-                    else:
-                        newCoord.setMatrix(matrix)
-                    outSet.append(newCoord)
+                moveFile(removeExt(fnTmp) + '_vIds.txt', self._getExtraPath())
+                for idv in np.unique(vsIds):
+                    vesicle_coords = coords[np.where(vsIds == idv)]
+                    shell = delaunayTriangulation(vesicle_coords)
+                    normals = computeNormals(shell)
+                    if vesicle_coords.size == 3:  # special case with only one coordinate
+                        vesicle_coords = [vesicle_coords]
+                    for idx, coord in enumerate(vesicle_coords):
+                        newCoord = Coordinate3D()
+                        tomograms = self.getMainInput().getPrecedents()
+                        newCoord.setVolume(tomograms[self.getTomoId(fnTmp)])
+                        newCoord.setPosition(coord[0], coord[1], coord[2])
+                        matrix = rotation_matrix_from_vectors(normals[idx], np.array([0, 0, 1]))
+                        if isinstance(self.inputCoordinates, list):
+                            newCoord.setMatrix(matrix)
+                        else:
+                            newCoord.setMatrix(matrix)
+                        outSet.append(newCoord)
 
             firstTime = not self.hasAttribute(self.outputName)
             self._updateOutputSet(self.outputName, outSet, streamMode)
@@ -263,14 +269,18 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
 
         # Get all coordinates for this tomogram
         coords = []
+        vesicles = []
         for idx, coordinates in enumerate(self.inputCoordinates):
             coordArray = np.asarray([x.getPosition() for x in
                                      coordinates.get().iterCoordinates(tomoId)],
                                      dtype=float)
+            vIds = np.asarray([x.getGroupId() for x in
+                                     coordinates.get().iterCoordinates(tomoId)])
             coordArray *= float(self.sampligRates[idx]) / float(self.sampligRates[0])
             coords.append(np.asarray(coordArray, dtype=int))
+            vesicles.append(np.asarray(vIds, dtype=int))
 
-        consensusWorker(coords, self.consensus.get(), self.consensusRadius.get(),
+        consensusWorker(coords, vesicles, self.consensus.get(), self.consensusRadius.get(),
                         self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, tomoId)),
                         self._getExtraPath('jaccard.txt'), self.mode.get())
 
@@ -313,7 +323,7 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
         return int(removeBaseExt(fn).lstrip(self.FN_PREFIX))
 
 
-def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
+def consensusWorker(coords, vesicles, consensus, consensusRadius, posFn, jaccFn=None,
                     mode=PICK_MODE_LARGER):
     """ Worker for calculate the consensus of N picking algorithms of
           M_n coordinates each one.
@@ -335,6 +345,7 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
     Ninputs = len(coords)
     Ncoords = sum([x.shape[0] for x in coords])
     allCoords = np.zeros([Ncoords, 3])
+    allVesicles = np.zeros([Ncoords])
     votes = np.zeros(Ncoords)
 
     inAllMicrographs = consensus <= 0 or consensus >= Ninputs
@@ -349,28 +360,34 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
     # Add all the first coordinates to 'allCoords' and 'votes' lists
     if N0 > 0:
         allCoords[0:N0, :] = coords[0]
+        allVesicles[0:N0] = vesicles[0]
         votes[0:N0] = 1
 
     # Add the rest of coordinates to 'allCoords' and 'votes' lists
     Ncurrent = N0
     for n in range(firstInput, Ninputs):
-        for coord in coords[n]:
-            if Ncurrent > 0:
-                dist = np.sum((coord - allCoords[0:Ncurrent]) ** 2, axis=1)
-                imin = np.argmin(dist)
-                if sqrt(dist[imin]) < consensusRadius:
-                    newCoord = (votes[imin] * allCoords[imin,] + coord) / (
-                                        votes[imin] + 1)
-                    allCoords[imin,] = newCoord
-                    votes[imin] += 1
+        for idv in np.unique(vesicles[n]):
+            coords_vesicle = coords[n][np.where(vesicles[n] == idv)]
+            for coord in coords_vesicle:
+                if Ncurrent > 0:
+                    dist = np.sum((coord - allCoords[0:Ncurrent]) ** 2, axis=1)
+                    imin = np.argmin(dist)
+                    if sqrt(dist[imin]) < consensusRadius:
+                        newCoord = (votes[imin] * allCoords[imin,] + coord) / (
+                                            votes[imin] + 1)
+                        allCoords[imin,] = newCoord
+                        allVesicles[imin] = idv
+                        votes[imin] += 1
+                    else:
+                        allCoords[Ncurrent, :] = coord
+                        allVesicles[Ncurrent] = idv
+                        votes[Ncurrent] = 1
+                        Ncurrent += 1
                 else:
                     allCoords[Ncurrent, :] = coord
+                    allVesicles[Ncurrent] = idv
                     votes[Ncurrent] = 1
                     Ncurrent += 1
-            else:
-                allCoords[Ncurrent, :] = coord
-                votes[Ncurrent] = 1
-                Ncurrent += 1
 
     # Select those in the consensus
     if consensus <= 0 or consensus > Ninputs:
@@ -380,8 +397,10 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
 
     if mode==PICK_MODE_LARGER:
         consensusCoords = allCoords[votes >= consensus, :]
+        vesiclesConsensus = allVesicles[votes >= consensus]
     else:
         consensusCoords = allCoords[votes == consensus, :]
+        vesiclesConsensus = allVesicles[votes == consensus]
 
     try:
         if jaccFn:
@@ -397,6 +416,7 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn=None,
     # are some coordinates (size > 0)
     if consensusCoords.size:
         np.savetxt(posFn, consensusCoords)
+        np.savetxt(removeExt(posFn) + '_vIds.txt', vesiclesConsensus)
 
 
 def getReadyTomos(coordSet):
