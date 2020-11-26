@@ -103,18 +103,18 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                             normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
                             if abs(normSubtomo[0]-normVesicle[0]) < tol and abs(normSubtomo[1]-normVesicle[1]) < tol \
                                     and abs(normSubtomo[2]-normVesicle[2]) < tol:
-                                self.outSet.append(subtomo)
-        if self.tilt.get():
-            if self.normalDir.get():
-                for subtomo in self.outSet:
-                    tilt = self._getTiltSubtomo(subtomo)
-                    if self.maxtilt.get() < tilt < self.mintilt.get():
-                        self.outSet.remove(subtomo)
-            else:
-                for subtomo in inSet:
-                    tilt = self._getTiltSubtomo(subtomo)
-                    if self.maxtilt.get() > tilt > self.mintilt.get():
-                        self.outSet.append(subtomo)
+                                if self.tilt.get():
+                                    tilt = self._getTiltSubtomo(subtomo)
+                                    if self.maxtilt.get() > tilt > self.mintilt.get():
+                                        self.outSet.append(subtomo)
+                                else:
+                                    self.outSet.append(subtomo)
+
+        if self.tilt.get() and not self.normalDir.get():
+            for subtomo in inSet:
+                tilt = self._getTiltSubtomo(subtomo)
+                if self.maxtilt.get() > tilt > self.mintilt.get():
+                    self.outSet.append(subtomo)
 
     def createOutputStep(self):
         self._defineOutputs(outputset=self.outSet)
@@ -182,5 +182,4 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
     def _getTiltSubtomo(self, subtomo):
         _, tilt, _ = tfs.euler_from_matrix(subtomo.getTransform().getMatrix(), axes='szyz')
         tilt = -np.rad2deg(tilt)
-        print(tilt)
         return tilt
