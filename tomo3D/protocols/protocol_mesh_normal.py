@@ -30,6 +30,7 @@ from os import path
 import numpy as np
 from pyworkflow.protocol.params import PointerParam, FloatParam, LEVEL_ADVANCED, BooleanParam, IntParam, EnumParam
 import pyworkflow.utils as pwutlis
+import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
 from tomo.protocols import ProtTomoBase
 from tomo.utils import normalFromMatrix
@@ -50,27 +51,35 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         form.addSection(label='Input')
         form.addParam('inputSubtomos', PointerParam, pointerClass="SetOfSubTomograms",
                       label='Subtomograms', help='SetOfSubtomograms to filter.')
-        form.addParam('inputMeshes', PointerParam, label="Vesicles", pointerClass='SetOfMeshes',
+        form.addParam('normalDir', BooleanParam, default=True,
+                      label='Filter subtomograms by normal',
+                      help='Remove the subtomograms that have a normal direction not equal to the normal direction of '
+                           'the vesicle in the coordinate of the particle.')
+        form.addParam('inputMeshes', PointerParam, label="Vesicles", pointerClass='SetOfMeshes', condition='normalDir',
                       help='Select the vesicles in which the subtomograms are.')
-        form.addParam('tol', FloatParam, default=5, label='Tolerance in degrees', expertLevel=LEVEL_ADVANCED,
+        form.addParam('tol', FloatParam, default=5, label='Tolerance in degrees',
+                      condition='normalDir', expertLevel=LEVEL_ADVANCED,
                       help='Tolerance (in degrees) when comparing between particle and mesh normal directions.')
+        form.addParam('tilt', BooleanParam, default=False,
+                      label='Filter subtomograms by tilt angle',
+                      help='Remove subtomograms depending on their tilt angle.')
+        form.addParam('maxtilt', IntParam, default=150, label='Maximum allowed tilt', condition='tilt',
+                      help='Remove the subtomograms that have a tilt angle bigger than the one specified in here, '
+                           'considering tilt angle between 0 and 180 degrees.')
+        form.addParam('mintilt', IntParam, default=30, label='Minimum allowed tilt', condition='tilt',
+                      help='Remove the subtomograms that have a tilt angle smaller than the one specified in here, '
+                           'considering tilt angle between 0 and 180 degrees.')
+
         # form.addParam('topBottom', BooleanParam, default=True,
-        #               label='Remove particles in the top and bottom of the vesicle',
-        #               help='Remove the particles that have been picked from the top and bottom parts because they '
+        #               label='Remove subtomograms in the top and bottom of the vesicle',
+        #               help='Remove the subtomograms that have been picked from the top and bottom parts because they '
         #                    'had a different view.')
-        # form.addParam('tilt', IntParam, default=60, label='Maximun allowed tilt',
-        #               help='Remove the particles that have been picked from the top and bottom with a tilt bigger
-        #               than the one specified in here.')
         # form.addParam('mwDir', BooleanParam, default=True,
-        #               label='Remove particles in the missing wedge direction',
-        #               help='Remove the particles that are in the missing wedge direction because they are highly '
+        #               label='Remove subtomograms in the missing wedge direction',
+        #               help='Remove the subtomograms that are in the missing wedge direction because they are highly '
         #                    'affected by the missing wedge.')
         # form.addParam('mwDir', EnumParam, default=True, label='Missing wedge direction',
         #               help='Missing wedge direction of the tomograms.')
-        # form.addParam('normalDir', BooleanParam, default=True,
-        #               label='Remove particles if they are not perpendicular to the membrane of the vesicle',
-        #               help='Remove the particles that have a normal direction not equal to the normal direction of '
-        #                    'the vesicle in the coordinate of the particle.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -79,67 +88,72 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
 
     # --------------------------- STEPS functions -------------------------------
     def computeNormalStep(self):
+        inSet = self.inputSubtomos.get()
         self.outSet = self._createSetOfSubTomograms()
-        self.outSet.copyInfo(self.inputSubtomos.get())
-        tol = self.tol.get()*np.pi/180
-        for subtomo in self.inputSubtomos.get():
-            for mesh in self.inputMeshes.get().iterItems():
-                pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
-                if pwutlis.removeBaseExt(path.basename(subtomo.getVolName())) == pathV[0]:
-                    if str(self._getVesicleId(subtomo)) == pathV[1]:
-                        normalsList = self._getNormalVesicleList(mesh)
-                        normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
-                        if abs(normSubtomo[0]-normVesicle[0]) < tol and abs(normSubtomo[1]-normVesicle[1]) < tol \
-                                and abs(normSubtomo[2]-normVesicle[2]) < tol:
-                            self.outSet.append(subtomo)
+        self.outSet.copyInfo(inSet)
+
+        if self.normalDir.get():
+            tol = self.tol.get()*np.pi/180
+            for subtomo in inSet:
+                for mesh in self.inputMeshes.get().iterItems():
+                    pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
+                    if pwutlis.removeBaseExt(path.basename(subtomo.getVolName())) == pathV[0]:
+                        if str(self._getVesicleId(subtomo)) == pathV[1]:
+                            normalsList = self._getNormalVesicleList(mesh)
+                            normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
+                            if abs(normSubtomo[0]-normVesicle[0]) < tol and abs(normSubtomo[1]-normVesicle[1]) < tol \
+                                    and abs(normSubtomo[2]-normVesicle[2]) < tol:
+                                if self.tilt.get():
+                                    tilt = self._getTiltSubtomo(subtomo)
+                                    if self.maxtilt.get() > tilt > self.mintilt.get():
+                                        self.outSet.append(subtomo)
+                                else:
+                                    self.outSet.append(subtomo)
+
+        if self.tilt.get() and not self.normalDir.get():
+            for subtomo in inSet:
+                tilt = self._getTiltSubtomo(subtomo)
+                if self.maxtilt.get() > tilt > self.mintilt.get():
+                    self.outSet.append(subtomo)
 
     def createOutputStep(self):
         self._defineOutputs(outputset=self.outSet)
         self._defineSourceRelation(self.inputSubtomos.get(), self.outSet)
 
     # --------------------------- INFO functions --------------------------------
-    # def _validate(self):
-    #     validateMsgs = []
-    #     if not self.inputMeshes.get().getFirstItem().hasDescription():
-    #         validateMsgs.append('Vesicles not adjusted, please use protocol "fit vesicles" previously')
-    #     return validateMsgs
+    def _validate(self):
+        validateMsgs = []
+        if not self.normalDir.get() and not self.tilt.get():
+            validateMsgs.append('Some filter should be switched to "Yes"')
+        return validateMsgs
 
     def _summary(self):
         summary = []
         if not self.isFinished():
-            summary.append("Output vesicles not ready yet.")
+            summary.append("Output subtomograms not ready yet.")
         else:
-            # if self.topBottom:
-            #     topBottom = 'Yes'
-            # else:
-            #     topBottom = 'No'
-            # if self.mwDir:
-            #     mwDir = 'Yes'
-            # else:
-            #     mwDir = 'No'
-            # if self.normalDir:
-            #     normalDir = 'Yes'
-            # else:
-            #     normalDir = 'No'
-            # summary.append("Filter criteria:\nTop/Bottom %s\nMW direction %s\nNormal direction %s" %
-            #                (topBottom, mwDir, normalDir))
-            summary.append("Remove particles in normal direction")
-            summary.append("Tolerance: %0.2fº" % self.tol.get())
+            if self.normalDir:
+                summary.append("Remove subtomograms by normal direction (tolerance of %0.2f degrees)" %
+                               self.tol.get())
+            if self.tilt:
+                summary.append("Remove subtomograms by tilt angle (max allowed tilt: %d, min allowed tilt: %d)" %
+                               (self.maxtilt.get(), self.mintilt.get()))
         return summary
 
     def _methods(self):
         methods = []
         if not self.isFinished():
-            methods.append("Output vesicles not ready yet.")
+            methods.append("Output subtomograms not ready yet.")
         else:
-            methods.append("%d subtomograms filtered from %d input subtomograms." %
-                           ((len(self.inputSubtomos.get()) - len(self.outputset.get())), len(self.inputSubtomos.get())))
+            if self.normalDir:
+                methods.append("Subtomograms that are not perpendicular to the membrane have been removed.")
+            if self.tilt:
+                methods.append("Subtomograms with tilt angle bigger than %d or smaller than %d have been removed." %
+                               (self.maxtilt.get(), self.mintilt.get()))
             # if self.topBottom:
             #     methods.append("Particles in the top and bottom parts of the vesicles have been removed.")
             # if self.mwDir:
             #     methods.append("Particles in the missing wedge direction have been removed.")
-            if self.normalDir:
-                methods.append("Particles that are not perpendicular to the membrane have been removed.")
         return methods
 
     # --------------------------- UTILS functions --------------------------------------------
@@ -164,3 +178,8 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         points = np.asarray(points)
         idx = np.argmin(np.sum((points - coors) ** 2, axis=1))
         return normSubtomo, normals[idx]
+
+    def _getTiltSubtomo(self, subtomo):
+        _, tilt, _ = tfs.euler_from_matrix(subtomo.getTransform().getMatrix(), axes='szyz')
+        tilt = -np.rad2deg(tilt)
+        return tilt
