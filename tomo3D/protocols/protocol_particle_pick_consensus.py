@@ -214,6 +214,7 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
                         tomograms = self.getMainInput().getPrecedents()
                         newCoord.setVolume(tomograms[self.getTomoId(fnTmp)])
                         newCoord.setPosition(coord[0], coord[1], coord[2])
+                        newCoord.setGroupId(idv)
                         matrix = rotation_matrix_from_vectors(normals[idx], np.array([0, 0, 1]))
                         if isinstance(self.inputCoordinates, list):
                             newCoord.setMatrix(matrix)
