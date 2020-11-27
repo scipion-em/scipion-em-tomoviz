@@ -28,7 +28,7 @@
 
 from os import path
 import numpy as np
-from pyworkflow.protocol.params import PointerParam, FloatParam, LEVEL_ADVANCED, BooleanParam, IntParam, EnumParam
+from pyworkflow.protocol.params import PointerParam, FloatParam, LEVEL_ADVANCED, BooleanParam, IntParam
 import pyworkflow.utils as pwutlis
 import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
@@ -89,32 +89,26 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
     # --------------------------- STEPS functions -------------------------------
     def computeNormalStep(self):
         inSet = self.inputSubtomos.get()
+        tiltBool = self.tilt.get()
+        normalBool = self.normalDir.get()
+        if normalBool:
+            tol = self.tol.get() * np.pi / 180
+
         self.outSet = self._createSetOfSubTomograms()
         self.outSet.copyInfo(inSet)
 
-        if self.normalDir.get():
-            tol = self.tol.get()*np.pi/180
-            for subtomo in inSet:
-                for mesh in self.inputMeshes.get().iterItems():
-                    pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
-                    if pwutlis.removeBaseExt(path.basename(subtomo.getVolName())) == pathV[0]:
-                        if str(self._getVesicleId(subtomo)) == pathV[1]:
-                            normalsList = self._getNormalVesicleList(mesh)
-                            normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
-                            if abs(normSubtomo[0]-normVesicle[0]) < tol and abs(normSubtomo[1]-normVesicle[1]) < tol \
-                                    and abs(normSubtomo[2]-normVesicle[2]) < tol:
-                                if self.tilt.get():
-                                    tilt = self._getTiltSubtomo(subtomo)
-                                    if self.maxtilt.get() > tilt > self.mintilt.get():
-                                        self.outSet.append(subtomo)
-                                else:
-                                    self.outSet.append(subtomo)
-
-        if self.tilt.get() and not self.normalDir.get():
+        if tiltBool:
             for subtomo in inSet:
                 tilt = self._getTiltSubtomo(subtomo)
                 if self.maxtilt.get() > tilt > self.mintilt.get():
-                    self.outSet.append(subtomo)
+                    if normalBool:
+                        self._filterByNormal(subtomo, tol)
+                    else:
+                        self.outSet.append(subtomo)
+
+        elif normalBool and not tiltBool:
+            for subtomo in inSet:
+                self._filterByNormal(subtomo, tol)
 
     def createOutputStep(self):
         self._defineOutputs(outputset=self.outSet)
@@ -132,12 +126,12 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         if not self.isFinished():
             summary.append("Output subtomograms not ready yet.")
         else:
-            if self.normalDir:
-                summary.append("Remove subtomograms by normal direction (tolerance of %0.2f degrees)" %
-                               self.tol.get())
             if self.tilt:
                 summary.append("Remove subtomograms by tilt angle (max allowed tilt: %d, min allowed tilt: %d)" %
                                (self.maxtilt.get(), self.mintilt.get()))
+            if self.normalDir:
+                summary.append("Remove subtomograms by normal direction (tolerance of %0.2f degrees)" %
+                               self.tol.get())
         return summary
 
     def _methods(self):
@@ -145,11 +139,12 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         if not self.isFinished():
             methods.append("Output subtomograms not ready yet.")
         else:
-            if self.normalDir:
-                methods.append("Subtomograms that are not perpendicular to the membrane have been removed.")
             if self.tilt:
                 methods.append("Subtomograms with tilt angle bigger than %d or smaller than %d have been removed." %
                                (self.maxtilt.get(), self.mintilt.get()))
+            if self.normalDir:
+                methods.append("Subtomograms that are not perpendicular to the membrane have been removed.")
+
             # if self.topBottom:
             #     methods.append("Particles in the top and bottom parts of the vesicles have been removed.")
             # if self.mwDir:
@@ -183,3 +178,15 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         _, tilt, _ = tfs.euler_from_matrix(subtomo.getTransform().getMatrix(), axes='szyz')
         tilt = -np.rad2deg(tilt)
         return tilt
+
+    def _filterByNormal(self, subtomo, tol):
+        for mesh in self.inputMeshes.get().iterItems():
+            pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
+            if pwutlis.removeBaseExt(path.basename(subtomo.getVolName())) == pathV[0]:
+                if str(self._getVesicleId(subtomo)) == pathV[1]:
+                    normalsList = self._getNormalVesicleList(mesh)
+                    normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
+                    if abs(normSubtomo[0] - normVesicle[0]) < tol \
+                            and abs(normSubtomo[1] - normVesicle[1]) < tol \
+                            and abs(normSubtomo[2] - normVesicle[2]) < tol:
+                        self.outSet.append(subtomo)
