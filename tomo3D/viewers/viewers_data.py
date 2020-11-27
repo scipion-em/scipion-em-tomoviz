@@ -31,6 +31,7 @@ import pwem.viewers.views as vi
 from .views_tkinter_tree import Tomo3DTreeProvider
 from .views_tkinter_tree import Tomo3DDialog
 
+
 import tomo.objects
 
 
@@ -40,7 +41,8 @@ class Tomo3DDataViewer(pwviewer.Viewer):
     """
     _environments = [pwviewer.DESKTOP_TKINTER]
     _targets = [
-        tomo.objects.SetOfCoordinates3D
+        tomo.objects.SetOfCoordinates3D,
+        tomo.objects.SetOfSubTomograms
     ]
 
     def __init__(self, **kwargs):
@@ -68,4 +70,26 @@ class Tomo3DDataViewer(pwviewer.Viewer):
 
             Tomo3DDialog(self._tkRoot, outputCoords, provider=tomoProvider)
 
+        if issubclass(cls, tomo.objects.SetOfSubTomograms):
+            outputSubtomos = obj
+
+            # tomos = outputSubtomos.getCoordinates3D().getPrecedents()  # setOfcoord not assigned to subtomos from pyseg
+
+            volIds = outputSubtomos.aggregate(["MAX"], "_volId", ["_volId"])
+            volIds = [d['_volId'] for d in volIds]
+
+            tomoList = [tomos[objId].clone() for objId in volIds]
+            tomoProvider = Tomo3DTreeProvider(tomoList)
+
+            Tomo3DDialog(self._tkRoot, outputSubtomos, provider=tomoProvider)
+
         return views
+
+
+    def _createSetOfTomograms(self):
+        tmpFileName = self.protocol._getTmpPath("tmpTomos.sqlite")
+        # _outputVol = self.protocol.outputVolume
+        setOfVolumes = tomo.objects.SetOfTomograms(filename=tmpFileName)
+        # setOfVolumes.append(_outputVol)
+        setOfVolumes.write()
+        return setOfVolumes
