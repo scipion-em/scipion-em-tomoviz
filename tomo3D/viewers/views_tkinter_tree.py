@@ -45,10 +45,10 @@ class Tomo3DTreeProvider(TreeProvider):
 
     def getObjectInfo(self, tomo):
         # tomogramName = pwutils.removeBaseExt(tomo.getFileName())
-        # tomogramName = pwutils.removeBaseExt(tomo.get())
+        tomogramName = pwutils.removeBaseExt(tomo.get())
 
-        return {'key': tomo, 'parent': None,
-                'text': tomo,
+        return {'key': tomogramName, 'parent': None,
+                'text': tomogramName,
                 'tags': ("done")}
 
     def getObjectPreview(self, obj):

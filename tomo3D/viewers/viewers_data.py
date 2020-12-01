@@ -84,12 +84,3 @@ class Tomo3DDataViewer(pwviewer.Viewer):
             Tomo3DDialog(self._tkRoot, outputSubtomos, provider=tomoProvider)
 
         return views
-
-
-    def _createSetOfTomograms(self):
-        tmpFileName = self.protocol._getTmpPath("tmpTomos.sqlite")
-        # _outputVol = self.protocol.outputVolume
-        setOfVolumes = tomo.objects.SetOfTomograms(filename=tmpFileName)
-        # setOfVolumes.append(_outputVol)
-        setOfVolumes.write()
-        return setOfVolumes
