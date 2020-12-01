@@ -73,13 +73,12 @@ class Tomo3DDataViewer(pwviewer.Viewer):
 
         if issubclass(cls, tomo.objects.SetOfSubTomograms):
             outputSubtomos = obj
+            tomoList = []
+            for subtomo in obj:
+                tomoname = String(subtomo.getVolName())
+                if tomoname not in tomoList:
+                    tomoList.append(tomoname)
 
-            # tomos = outputSubtomos.getCoordinates3D().getPrecedents()  # setOfcoord not assigned to subtomos from pyseg
-
-            volIds = outputSubtomos.aggregate(["MAX"], "_volId", ["_volId"])
-            volIds = [d['_volId'] for d in volIds]
-
-            tomoList = [tomos[objId].clone() for objId in volIds]
             tomoProvider = Tomo3DTreeProvider(tomoList)
 
             Tomo3DDialog(self._tkRoot, outputSubtomos, provider=tomoProvider)
