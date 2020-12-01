@@ -44,7 +44,8 @@ class Tomo3DTreeProvider(TreeProvider):
         return [('Tomogram', 300)]
 
     def getObjectInfo(self, tomo):
-        tomogramName = pwutils.removeBaseExt(tomo.getFileName())
+        # tomogramName = pwutils.removeBaseExt(tomo.getFileName())
+        tomogramName = pwutils.removeBaseExt(tomo.get())
 
         return {'key': tomogramName, 'parent': None,
                 'text': tomogramName,
@@ -86,12 +87,14 @@ class Tomo3DDialog(ToolbarListDialog):
 
     def doubleClickOnTomogram(self, e=None):
         self.tomo = e
-        tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        # tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        tomoName = pwutils.removeBaseExt(self.tomo.get())
         self.dictVesicles = extractVesicles(self.coordinates, self.dictVesicles, tomoName)
         self.createViewer()
 
     def createViewer(self):
-        tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        # tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        tomoName = pwutils.removeBaseExt(self.tomo.get())
         normals = self.dictVesicles[tomoName]['normals']
         vesicles = self.dictVesicles[tomoName]['vesicles']
         shells = []
