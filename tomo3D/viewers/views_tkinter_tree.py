@@ -24,13 +24,11 @@
 # *
 # **************************************************************************
 
-from multiprocessing import Process
-
 from pyworkflow import utils as pwutils
 from pyworkflow.gui.dialog import ToolbarListDialog
 from pyworkflow.gui.tree import TreeProvider
 
-from .viewer_triangulations import TriangulationPlot
+from .viewer_triangulations import TriangulationPlot, guiThread
 from ..utils import delaunayTriangulation
 
 from tomo.utils import extractVesicles, initDictVesicles
@@ -46,7 +44,8 @@ class Tomo3DTreeProvider(TreeProvider):
         return [('Tomogram', 300)]
 
     def getObjectInfo(self, tomo):
-        tomogramName = pwutils.removeBaseExt(tomo.getFileName())
+        # tomogramName = pwutils.removeBaseExt(tomo.getFileName())
+        tomogramName = pwutils.removeBaseExt(tomo.get())
 
         return {'key': tomogramName, 'parent': None,
                 'text': tomogramName,
@@ -88,17 +87,18 @@ class Tomo3DDialog(ToolbarListDialog):
 
     def doubleClickOnTomogram(self, e=None):
         self.tomo = e
-        tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        # tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        tomoName = pwutils.removeBaseExt(self.tomo.get())
         self.dictVesicles = extractVesicles(self.coordinates, self.dictVesicles, tomoName)
-        self.proc = Process(target=createViewer, args=(self.tomo, self.dictVesicles))
-        self.proc.start()
+        self.createViewer()
 
-def createViewer(tomo, vesicles_dict):
-    tomoName = pwutils.removeBaseExt(tomo.getFileName())
-    normals = vesicles_dict[tomoName]['normals']
-    vesicles = vesicles_dict[tomoName]['vesicles']
-    shells = []
-    for vesicle in vesicles:
-        shells.append(delaunayTriangulation(vesicle))
-    plt = TriangulationPlot(shells, clouds=vesicles, extNormals_List=normals)
-    plt.initializePlot()
+    def createViewer(self):
+        # tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        tomoName = pwutils.removeBaseExt(self.tomo.get())
+        normals = self.dictVesicles[tomoName]['normals']
+        vesicles = self.dictVesicles[tomoName]['vesicles']
+        shells = []
+        for vesicle in vesicles:
+            shells.append(delaunayTriangulation(vesicle))
+        classArgs = {'meshes': shells, 'clouds': vesicles, 'extNormals_List': normals}
+        guiThread(TriangulationPlot, 'initializePlot', **classArgs)

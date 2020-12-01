@@ -28,6 +28,7 @@
 import pyvista as pv
 import numpy as np
 from scipy.spatial.distance import pdist
+from multiprocessing import Process
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QDockWidget
 from pyvistaqt.plotting import QtInteractor
@@ -161,3 +162,41 @@ class TriangulationPlot(object):
 
     def initializePlot(self):
         self.app.exec_()
+        
+# The following functions are used to create automatically a "gui thread" to avoid the 'exec_' loop 
+# from freezing the main thread
+
+def guiThread(classObj, methodName, *args, **kwargs):
+    '''
+    Create a new process to prevent the exec_ loop of the GUI from blocking the main thread. In order to work,
+    the GUI classes must be instantiated withing the process.
+    '''
+    proc = Process(target=instantiateClass, args=(classObj, methodName, *args,), kwargs=kwargs)
+    proc.start()
+    
+def instantiateClass(classObj, methodName, *args, **kwargs):
+    '''
+    Create an instance of any class and call a visualization method (or any other method).
+        - classObj (class): Class to be instantiated
+        - methodName (string): Method from the class to be called after the instantiation
+        - *args (list): extra argument needed to call the class method
+        - **kwargs (dict): arguments to be passed to the contructor of the class
+    '''
+    try:
+        instance = classObj(**kwargs)
+        runMethod(instance, methodName, *args)
+    except:
+        print('Cannot create instance of class')
+    
+def runMethod(instance, methodName, *args):
+    '''
+    Execute a method from an instantiated class:
+        - instance (obj): object instantiated from a given class
+        - methodName (string): method belonging to instance to be called
+        - *args (list): extra arguments needed by the method
+    '''
+    try:
+        method = getattr(instance, methodName)
+        method(*args)
+    except AttributeError:
+        print(methodName + ' is not a member the class')

@@ -25,7 +25,7 @@
 # **************************************************************************
 
 import pyworkflow.viewer as pwviewer
-import pyworkflow.utils as pwutils
+from pyworkflow.object import String
 
 import pwem.viewers.views as vi
 from .views_tkinter_tree import Tomo3DTreeProvider
@@ -63,7 +63,8 @@ class Tomo3DDataViewer(pwviewer.Viewer):
             volIds = outputCoords.aggregate(["MAX"], "_volId", ["_volId"])
             volIds = [d['_volId'] for d in volIds]
 
-            tomoList = [tomos[objId].clone() for objId in volIds]
+            # tomoList = [tomos[objId].clone() for objId in volIds]
+            tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
             tomoProvider = Tomo3DTreeProvider(tomoList)
 
             Tomo3DDialog(self._tkRoot, outputCoords, provider=tomoProvider)
