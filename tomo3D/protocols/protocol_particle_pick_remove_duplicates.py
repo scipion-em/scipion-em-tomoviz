@@ -112,8 +112,11 @@ class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
         coordArray = np.asarray([x.getPosition() for x in
                                  self.getMainInput().iterCoordinates(tomoId)],
                                  dtype=int)
+        vIds = np.asarray([x.getGroupId() for x in
+                           self.getMainInput().iterCoordinates(tomoId)],
+                           dtype=int)
 
-        consensusWorker([coordArray], 1, self.consensusRadius.get(),
+        consensusWorker([coordArray], [vIds], 1, self.consensusRadius.get(),
                         self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, tomoId)))
 
         self.processedTomos.update([tomoId])
