@@ -26,4 +26,3 @@
 # **************************************************************************
 
 from .viewers_data import Tomo3DDataViewer
-from .viewer_mesh_normal import ProtMeshNormal3DDataViewer
