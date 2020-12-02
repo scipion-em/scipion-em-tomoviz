@@ -24,6 +24,8 @@
 # *
 # **************************************************************************
 
+import numpy as np
+
 import pyworkflow.viewer as pwviewer
 from pyworkflow.object import String
 
@@ -31,11 +33,11 @@ import pwem.viewers.views as vi
 from .views_tkinter_tree import Tomo3DTreeProvider
 from .views_tkinter_tree import Tomo3DDialog
 
-
 import tomo.objects
+from tomo.protocols import ProtTomoBase
 
 
-class Tomo3DDataViewer(pwviewer.Viewer):
+class Tomo3DDataViewer(pwviewer.Viewer, ProtTomoBase):
     """ Wrapper to visualize different type of objects
     using pyvista
     """
@@ -74,13 +76,15 @@ class Tomo3DDataViewer(pwviewer.Viewer):
         if issubclass(cls, tomo.objects.SetOfSubTomograms):
             outputSubtomos = obj
             tomoList = []
+            coordSet = self._createSetOfCoordinates3D()
             for subtomo in obj:
+                coordSet.append(subtomo.getCoordinate3D())
                 tomoname = String(subtomo.getVolName())
                 if tomoname not in tomoList:
                     tomoList.append(tomoname)
 
             tomoProvider = Tomo3DTreeProvider(tomoList)
 
-            Tomo3DDialog(self._tkRoot, outputSubtomos, provider=tomoProvider)
+            Tomo3DDialog(self._tkRoot, coordSet, provider=tomoProvider)
 
         return views
