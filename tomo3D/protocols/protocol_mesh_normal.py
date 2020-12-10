@@ -32,6 +32,7 @@ from pyworkflow.protocol.params import PointerParam, FloatParam, LEVEL_ADVANCED,
 import pyworkflow.utils as pwutlis
 import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
+from tomo.objects import Coordinate3D
 from tomo.protocols import ProtTomoBase
 from tomo.utils import normalFromMatrix
 from ..utils import delaunayTriangulation, computeNormals
@@ -111,8 +112,25 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                 self._filterByNormal(subtomo, tol)
 
     def createOutputStep(self):
+        # Create setOfCoordinates3D from SetOfMeshes in order to use PyVista viewer
+        inputMeshes = self.inputMeshes.get()
+        meshCoords = self._createSetOfCoordinates3D(inputMeshes.getVolumes())
+        for mesh in inputMeshes:
+            incoords = mesh.getMesh()
+            meshId = mesh.getVolId()
+            meshGroup = mesh.getGroup()
+            for coord in incoords:
+                outcoord = Coordinate3D()
+                outcoord.setX(coord[0])
+                outcoord.setY(coord[1])
+                outcoord.setZ(coord[2])
+                outcoord.setGroupId(meshGroup)
+                outcoord.setVolId(meshId)
+                meshCoords.append(outcoord)
         self._defineOutputs(outputset=self.outSet)
+        self._defineOutputs(meshCoords=meshCoords)
         self._defineSourceRelation(self.inputSubtomos.get(), self.outSet)
+        self._defineSourceRelation(inputMeshes, meshCoords)
 
     # --------------------------- INFO functions --------------------------------
     def _validate(self):
