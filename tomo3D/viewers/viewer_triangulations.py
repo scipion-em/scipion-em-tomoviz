@@ -129,10 +129,16 @@ class TriangulationPlot(object):
                 normals = pv.pyvista_ndarray(normals)
                 vecLength = np.amax(pdist(self.meshes[idn].points))
                 normals = vecLength * (normals / np.linalg.norm(normals, axis=1)[:, np.newaxis])
-                areZero = np.where((self.meshes[idn].point_normals == (0, 0, 0)).all(axis=1))
-                normals[areZero] = np.array((0, 0, 0))
-                self.actor_extNormals.append(self.p.add_arrows(self.meshes[idn].points, normals,
-                                             mag=0.1, color='red'))
+                if len(normals) == len(self.meshes[idn].point_normals):
+                    areZero = np.where((self.meshes[idn].point_normals == (0, 0, 0)).all(axis=1))
+                    normals[areZero] = np.array((0, 0, 0))
+                    self.actor_extNormals.append(self.p.add_arrows(self.meshes[idn].points, normals,
+                                                                   mag=0.1, color='red'))
+                else:
+                    areZero = np.where((normals == (0, 0, 0)).all(axis=1))
+                    normals[areZero] = np.array((0, 0, 0))
+                    self.actor_extNormals.append(self.p.add_arrows(normals, normals,
+                                                                   mag=0.1, color='red'))
         else:
             for actor in self.actor_extNormals:
                 self.p.remove_actor(actor)
