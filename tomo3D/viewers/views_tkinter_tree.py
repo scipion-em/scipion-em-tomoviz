@@ -103,13 +103,18 @@ class Tomo3DDialog(ToolbarListDialog):
 
         if self.extnormals is not None:
             normals = []
+            extcoords = []
             normals.append([])
             for subtomo in self.extnormals:
                 normal = normalFromMatrix(subtomo.getTransform().getMatrix())
+                coord = subtomo.getCoordinate3D()
+                coordSubtomo = [coord.getX(), coord.getY(), coord.getZ()]
                 normals[0].append(normal)
+                extcoords.append(coordSubtomo)
 
         else:
             normals = self.dictVesicles[tomoName]['normals']
+            extcoords = None
 
-        classArgs = {'meshes': shells, 'clouds': vesicles, 'extNormals_List': normals}
+        classArgs = {'meshes': shells, 'clouds': vesicles, 'extNormals_List': normals, 'extNormals_coords': extcoords}
         guiThread(TriangulationPlot, 'initializePlot', **classArgs)
