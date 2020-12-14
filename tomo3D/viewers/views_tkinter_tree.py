@@ -31,7 +31,7 @@ from pyworkflow.gui.tree import TreeProvider
 from .viewer_triangulations import TriangulationPlot, guiThread
 from ..utils import delaunayTriangulation
 
-from tomo.utils import extractVesicles, initDictVesicles
+from tomo.utils import extractVesicles, initDictVesicles, normalFromMatrix
 
 class Tomo3DTreeProvider(TreeProvider):
     """ Populate Tree from SetOfTomograms. """
@@ -75,9 +75,10 @@ class Tomo3DDialog(ToolbarListDialog):
     a pyvista viewer subprocess from a list of Tomograms.
     """
 
-    def __init__(self, parent, coordinates, **kwargs):
+    def __init__(self, parent, coordinates, extnormals, **kwargs):
         self.dictVesicles, _ = initDictVesicles(coordinates)
         self.coordinates = coordinates
+        self.extnormals = extnormals
         self.provider = kwargs.get("provider", None)
         ToolbarListDialog.__init__(self, parent,
                                    "Tomogram List",
@@ -95,10 +96,25 @@ class Tomo3DDialog(ToolbarListDialog):
     def createViewer(self):
         # tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
         tomoName = pwutils.removeBaseExt(self.tomo.get())
-        normals = self.dictVesicles[tomoName]['normals']
         vesicles = self.dictVesicles[tomoName]['vesicles']
         shells = []
         for vesicle in vesicles:
             shells.append(delaunayTriangulation(vesicle))
-        classArgs = {'meshes': shells, 'clouds': vesicles, 'extNormals_List': normals}
+
+        if self.extnormals is not None:
+            normals = []
+            extcoords = []
+            normals.append([])
+            for subtomo in self.extnormals:
+                normal = normalFromMatrix(subtomo.getTransform().getMatrix())
+                coord = subtomo.getCoordinate3D()
+                coordSubtomo = [coord.getX(), coord.getY(), coord.getZ()]
+                normals[0].append(normal)
+                extcoords.append(coordSubtomo)
+
+        else:
+            normals = self.dictVesicles[tomoName]['normals']
+            extcoords = None
+
+        classArgs = {'meshes': shells, 'clouds': vesicles, 'extNormals_List': normals, 'extNormals_coords': extcoords}
         guiThread(TriangulationPlot, 'initializePlot', **classArgs)

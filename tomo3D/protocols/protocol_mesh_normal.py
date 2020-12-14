@@ -32,6 +32,7 @@ from pyworkflow.protocol.params import PointerParam, FloatParam, LEVEL_ADVANCED,
 import pyworkflow.utils as pwutlis
 import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
+from tomo.objects import Coordinate3D
 from tomo.protocols import ProtTomoBase
 from tomo.utils import normalFromMatrix
 from ..utils import delaunayTriangulation, computeNormals
@@ -51,15 +52,8 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         form.addSection(label='Input')
         form.addParam('inputSubtomos', PointerParam, pointerClass="SetOfSubTomograms",
                       label='Subtomograms', help='SetOfSubtomograms to filter.')
-        form.addParam('normalDir', BooleanParam, default=True,
-                      label='Filter subtomograms by normal',
-                      help='Remove the subtomograms that have a normal direction not equal to the normal direction of '
-                           'the vesicle in the coordinate of the particle.')
-        form.addParam('inputMeshes', PointerParam, label="Vesicles", pointerClass='SetOfMeshes', condition='normalDir',
+        form.addParam('inputMeshes', PointerParam, label="Vesicles", pointerClass='SetOfMeshes',
                       help='Select the vesicles in which the subtomograms are.')
-        form.addParam('tol', FloatParam, default=5, label='Tolerance in degrees',
-                      condition='normalDir', expertLevel=LEVEL_ADVANCED,
-                      help='Tolerance (in degrees) when comparing between particle and mesh normal directions.')
         form.addParam('tilt', BooleanParam, default=False,
                       label='Filter subtomograms by tilt angle',
                       help='Remove subtomograms depending on their tilt angle.')
@@ -69,6 +63,13 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         form.addParam('mintilt', IntParam, default=30, label='Minimum allowed tilt', condition='tilt',
                       help='Remove the subtomograms that have a tilt angle smaller than the one specified in here, '
                            'considering tilt angle between 0 and 180 degrees.')
+        form.addParam('normalDir', BooleanParam, default=True,
+                      label='Filter subtomograms by normal',
+                      help='Remove the subtomograms that have a normal direction not equal to the normal direction of '
+                           'the vesicle in the coordinate of the particle.')
+        form.addParam('tol', FloatParam, default=5, label='Tolerance in degrees',
+                      condition='normalDir',
+                      help='Tolerance (in degrees) when comparing between particle and mesh normal directions.')
 
         # form.addParam('topBottom', BooleanParam, default=True,
         #               label='Remove subtomograms in the top and bottom of the vesicle',
@@ -111,8 +112,25 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                 self._filterByNormal(subtomo, tol)
 
     def createOutputStep(self):
+        # Create setOfCoordinates3D from SetOfMeshes in order to use PyVista viewer
+        inputMeshes = self.inputMeshes.get()
+        meshCoords = self._createSetOfCoordinates3D(inputMeshes.getVolumes())
+        for mesh in inputMeshes:
+            incoords = mesh.getMesh()
+            meshId = mesh.getVolId()
+            meshGroup = mesh.getGroup()
+            for coord in incoords:
+                outcoord = Coordinate3D()
+                outcoord.setX(coord[0])
+                outcoord.setY(coord[1])
+                outcoord.setZ(coord[2])
+                outcoord.setGroupId(meshGroup)
+                outcoord.setVolId(meshId)
+                meshCoords.append(outcoord)
         self._defineOutputs(outputset=self.outSet)
+        self._defineOutputs(meshCoords=meshCoords)
         self._defineSourceRelation(self.inputSubtomos.get(), self.outSet)
+        self._defineSourceRelation(inputMeshes, meshCoords)
 
     # --------------------------- INFO functions --------------------------------
     def _validate(self):

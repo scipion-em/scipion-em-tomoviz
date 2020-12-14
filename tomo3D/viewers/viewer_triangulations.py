@@ -53,10 +53,11 @@ class TriangulationPlot(object):
     '''
 
 
-    def __init__(self, meshes, clouds=None, extNormals_List=None):
+    def __init__(self, meshes, clouds=None, extNormals_List=None, extNormals_coords=None):
         self.clouds = clouds
         self.meshes = meshes
         self.extNormals_List = extNormals_List
+        self.extNormals_coords = extNormals_coords
         self.initialize_PyQt()
         self.actor_meshes = []
         self.actor_normals = []
@@ -129,10 +130,15 @@ class TriangulationPlot(object):
                 normals = pv.pyvista_ndarray(normals)
                 vecLength = np.amax(pdist(self.meshes[idn].points))
                 normals = vecLength * (normals / np.linalg.norm(normals, axis=1)[:, np.newaxis])
-                areZero = np.where((self.meshes[idn].point_normals == (0, 0, 0)).all(axis=1))
-                normals[areZero] = np.array((0, 0, 0))
-                self.actor_extNormals.append(self.p.add_arrows(self.meshes[idn].points, normals,
-                                             mag=0.1, color='red'))
+                if self.extNormals_coords is None:
+                    areZero = np.where((self.meshes[idn].point_normals == (0, 0, 0)).all(axis=1))
+                    normals[areZero] = np.array((0, 0, 0))
+                    self.actor_extNormals.append(self.p.add_arrows(self.meshes[idn].points, normals,
+                                                                   mag=0.1, color='red'))
+                else:
+                    extNormals_coords = pv.pyvista_ndarray(self.extNormals_coords)
+                    self.actor_extNormals.append(self.p.add_arrows(extNormals_coords, normals,
+                                                                   mag=0.1, color='red'))
         else:
             for actor in self.actor_extNormals:
                 self.p.remove_actor(actor)
