@@ -36,3 +36,5 @@ Thee following libraries are also needed by PyQt.
     Ubuntu:
     sudo apt-get install libxcb-xinerama0
     sudo apt install libxcb-image0
+
+The viewers associated to this plugin require OpenGL 3.2 or later and Mesa 11.2 or later.
