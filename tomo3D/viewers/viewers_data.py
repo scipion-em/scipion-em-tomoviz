@@ -24,14 +24,17 @@
 # *
 # **************************************************************************
 
+
 import pyworkflow.viewer as pwviewer
 from pyworkflow.object import String
 
+from pwem.protocols import EMProtocol
 import pwem.viewers.views as vi
 from .views_tkinter_tree import Tomo3DTreeProvider
 from .views_tkinter_tree import Tomo3DDialog
 
 import tomo.objects
+from ..protocols import XmippProtFilterbyNormal
 
 
 class Tomo3DDataViewer(pwviewer.Viewer):
@@ -40,7 +43,8 @@ class Tomo3DDataViewer(pwviewer.Viewer):
     """
     _environments = [pwviewer.DESKTOP_TKINTER]
     _targets = [
-        tomo.objects.SetOfCoordinates3D
+        tomo.objects.SetOfCoordinates3D,
+        XmippProtFilterbyNormal
     ]
 
     def __init__(self, **kwargs):
@@ -57,16 +61,21 @@ class Tomo3DDataViewer(pwviewer.Viewer):
 
         if issubclass(cls, tomo.objects.SetOfCoordinates3D):
             outputCoords = obj
+        elif issubclass(cls, EMProtocol):
+            outputCoords = obj.meshCoords
 
-            tomos = outputCoords.getPrecedents()
+        tomos = outputCoords.getPrecedents()
 
-            volIds = outputCoords.aggregate(["MAX"], "_volId", ["_volId"])
-            volIds = [d['_volId'] for d in volIds]
+        volIds = outputCoords.aggregate(["MAX"], "_volId", ["_volId"])
+        volIds = [d['_volId'] for d in volIds]
 
-            # tomoList = [tomos[objId].clone() for objId in volIds]
-            tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
-            tomoProvider = Tomo3DTreeProvider(tomoList)
+        # tomoList = [tomos[objId].clone() for objId in volIds]
+        tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
+        tomoProvider = Tomo3DTreeProvider(tomoList)
 
-            Tomo3DDialog(self._tkRoot, outputCoords, provider=tomoProvider)
+        if issubclass(cls, tomo.objects.SetOfCoordinates3D):
+            Tomo3DDialog(self._tkRoot, outputCoords, None, provider=tomoProvider)
+        elif issubclass(cls, EMProtocol):
+            Tomo3DDialog(self._tkRoot, outputCoords, obj.outputset, provider=tomoProvider)
 
         return views
