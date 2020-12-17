@@ -105,12 +105,13 @@ class Tomo3DDialog(ToolbarListDialog):
             normals = []
             extcoords = []
             normals.append([])
-            for subtomo in self.extnormals:
-                normal = normalFromMatrix(subtomo.getTransform().getMatrix())
-                coord = subtomo.getCoordinate3D()
-                coordSubtomo = [coord.getX(), coord.getY(), coord.getZ()]
-                normals[0].append(normal)
-                extcoords.append(coordSubtomo)
+            for subtomo in self.extnormals:  # separate normals by tomoName/volId
+                if pwutils.removeBaseExt(subtomo.getVolName()) == tomoName:
+                    normal = normalFromMatrix(subtomo.getTransform().getMatrix())
+                    coord = subtomo.getCoordinate3D()
+                    coordSubtomo = [coord.getX(), coord.getY(), coord.getZ()]
+                    normals[0].append(normal)
+                    extcoords.append(coordSubtomo)
 
         else:
             normals = self.dictVesicles[tomoName]['normals']
