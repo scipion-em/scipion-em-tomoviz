@@ -94,6 +94,11 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         normalBool = self.normalDir.get()
         if normalBool:
             tol = self.tol.get() * np.pi / 180
+            meshDict = {}
+            for mesh in self.inputMeshes.get().iterItems():
+                print("---------mesh group----------", mesh.getGroup())  # unique when just one run of pyseg!
+                # need to check both vesicle id and tomoName
+                meshDict[mesh.getGroup()] = mesh
 
         self.outSet = self._createSetOfSubTomograms()
         self.outSet.copyInfo(inSet)
@@ -103,13 +108,17 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                 tilt = self._getTiltSubtomo(subtomo)
                 if self.maxtilt.get() > tilt > self.mintilt.get():
                     if normalBool:
-                        self._filterByNormal(subtomo, tol)
+                        mesh = meshDict[self._getVesicleId(subtomo)]
+                        self._filterByNormal(subtomo, tol, mesh)
                     else:
                         self.outSet.append(subtomo)
 
         elif normalBool and not tiltBool:
             for subtomo in inSet:
-                self._filterByNormal(subtomo, tol)
+                print("---------subtomo group----------", self._getVesicleId(subtomo))
+                meshfromDict = meshDict[self._getVesicleId(subtomo)]
+                print("---------mesh----------", meshfromDict.getGroup())
+                self._filterByNormal(subtomo, tol, meshfromDict)
 
     def createOutputStep(self):
         # Create setOfCoordinates3D from SetOfMeshes in order to use PyVista viewer
@@ -197,14 +206,14 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         tilt = -np.rad2deg(tilt)
         return tilt
 
-    def _filterByNormal(self, subtomo, tol):
-        for mesh in self.inputMeshes.get().iterItems():
-            pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
-            if pwutlis.removeBaseExt(path.basename(subtomo.getVolName())) == pathV[0]:
-                if str(self._getVesicleId(subtomo)) == pathV[1]:
-                    normalsList = self._getNormalVesicleList(mesh)
-                    normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
-                    if abs(normSubtomo[0] - normVesicle[0]) < tol \
-                            and abs(normSubtomo[1] - normVesicle[1]) < tol \
-                            and abs(normSubtomo[2] - normVesicle[2]) < tol:
-                        self.outSet.append(subtomo)
+    def _filterByNormal(self, subtomo, tol, mesh):
+        # for mesh in self.inputMeshes.get().iterItems():
+        #     pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
+        #     if pwutlis.removeBaseExt(path.basename(subtomo.getVolName())) == pathV[0]:
+        # if str(self._getVesicleId(subtomo)) == mesh.getGroup():
+        normalsList = self._getNormalVesicleList(mesh)
+        normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
+        if abs(normSubtomo[0] - normVesicle[0]) < tol \
+                and abs(normSubtomo[1] - normVesicle[1]) < tol \
+                and abs(normSubtomo[2] - normVesicle[2]) < tol:
+            self.outSet.append(subtomo)
