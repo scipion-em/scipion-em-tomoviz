@@ -28,7 +28,7 @@
 
 from os import path
 import numpy as np
-from pyworkflow.protocol.params import PointerParam, FloatParam, LEVEL_ADVANCED, BooleanParam, IntParam
+from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, IntParam
 import pyworkflow.utils as pwutlis
 import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
