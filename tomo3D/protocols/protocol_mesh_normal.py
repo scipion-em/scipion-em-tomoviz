@@ -107,15 +107,15 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                 tilt = self._getTiltSubtomo(subtomo)
                 if self.maxtilt.get() > tilt > self.mintilt.get():
                     if normalBool:
-                        # meshfromDict = meshDict[pwutlis.removeBaseExt(path.basename(subtomo.getVolName()))][self._getVesicleId(subtomo)]
                         meshfromDict = inMeshes[meshDict[self._getVesicleId(subtomo)]]
-                        self._filterByNormal(subtomo, tol, meshfromDict)
+                        if pwutlis.removeBaseExt(path.basename(meshfromDict.getPath())).split('_vesicle_')[0] == \
+                                pwutlis.removeBaseExt(path.basename(subtomo.getVolName())):
+                            self._filterByNormal(subtomo, tol, meshfromDict)
                     else:
                         self.outSet.append(subtomo)
 
         if normalBool and not tiltBool:
             for subtomo in inSet:
-                # meshIDfromDict = meshDict[self._getVesicleId(subtomo)]
                 meshfromDict = inMeshes[meshDict[self._getVesicleId(subtomo)]]
                 if pwutlis.removeBaseExt(path.basename(meshfromDict.getPath())).split('_vesicle_')[0] == \
                         pwutlis.removeBaseExt(path.basename(subtomo.getVolName())):
@@ -208,10 +208,6 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         return tilt
 
     def _filterByNormal(self, subtomo, tol, mesh):
-        # for mesh in self.inputMeshes.get().iterItems():
-        #     pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
-        #     if pwutlis.removeBaseExt(path.basename(subtomo.getVolName())) == pathV[0]:
-        # if str(self._getVesicleId(subtomo)) == mesh.getGroup():
         normalsList = self._getNormalVesicleList(mesh)
         normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
         if abs(normSubtomo[0] - normVesicle[0]) < tol \
