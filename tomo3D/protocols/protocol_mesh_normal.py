@@ -92,13 +92,12 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         inSet = self.inputSubtomos.get()
         tiltBool = self.tilt.get()
         normalBool = self.normalDir.get()
+        inMeshes = self.inputMeshes.get()
         if normalBool:
             tol = self.tol.get() * np.pi / 180
             meshDict = {}
-            for mesh in self.inputMeshes.get().iterItems():
-                print("---------mesh group----------", mesh.getGroup())  # unique when just one run of pyseg!
-                # need to check both vesicle id and tomoName
-                meshDict[mesh.getGroup()] = mesh
+            for mesh in inMeshes:
+                meshDict[mesh.getGroup()] = mesh.getObjId()
 
         self.outSet = self._createSetOfSubTomograms()
         self.outSet.copyInfo(inSet)
@@ -108,17 +107,19 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                 tilt = self._getTiltSubtomo(subtomo)
                 if self.maxtilt.get() > tilt > self.mintilt.get():
                     if normalBool:
-                        mesh = meshDict[self._getVesicleId(subtomo)]
-                        self._filterByNormal(subtomo, tol, mesh)
+                        # meshfromDict = meshDict[pwutlis.removeBaseExt(path.basename(subtomo.getVolName()))][self._getVesicleId(subtomo)]
+                        meshfromDict = inMeshes[meshDict[self._getVesicleId(subtomo)]]
+                        self._filterByNormal(subtomo, tol, meshfromDict)
                     else:
                         self.outSet.append(subtomo)
 
-        elif normalBool and not tiltBool:
+        if normalBool and not tiltBool:
             for subtomo in inSet:
-                print("---------subtomo group----------", self._getVesicleId(subtomo))
-                meshfromDict = meshDict[self._getVesicleId(subtomo)]
-                print("---------mesh----------", meshfromDict.getGroup())
-                self._filterByNormal(subtomo, tol, meshfromDict)
+                # meshIDfromDict = meshDict[self._getVesicleId(subtomo)]
+                meshfromDict = inMeshes[meshDict[self._getVesicleId(subtomo)]]
+                if pwutlis.removeBaseExt(path.basename(meshfromDict.getPath())).split('_vesicle_')[0] == \
+                        pwutlis.removeBaseExt(path.basename(subtomo.getVolName())):
+                    self._filterByNormal(subtomo, tol, meshfromDict)
 
     def createOutputStep(self):
         # Create setOfCoordinates3D from SetOfMeshes in order to use PyVista viewer
