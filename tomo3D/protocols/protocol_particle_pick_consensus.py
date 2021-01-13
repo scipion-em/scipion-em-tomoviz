@@ -39,8 +39,7 @@ import pyworkflow.protocol.params as params
 from pyworkflow.protocol.constants import *
 from pyworkflow.utils import getFiles, removeBaseExt, moveFile, removeExt
 
-# from ..utils import rotation_matrix_from_vectors, delaunayTriangulation, computeNormals, inverse_Transformation
-from ..utils import inverse_Transformation
+from ..utils import *
 
 from tomo.protocols import ProtTomoPicking
 from tomo.objects import SetOfCoordinates3D, Coordinate3D
@@ -354,13 +353,21 @@ def consensusWorker(coords, vesicles, trMats, consensus, consensusRadius, posFn,
         N0 = coords[0].shape[0]
         firstInput = 1
 
+
     # initializing arrays
     Ninputs = len(coords)
     Ncoords = sum([x.shape[0] for x in coords])
     allCoords = np.zeros([Ncoords, 3])
     allVesicles = np.zeros([Ncoords])
-    allTr = np.zeros([Ncoords, 4, 4])
+    allQuaternions = np.zeros([Ncoords, 1, 4])
     votes = np.zeros(Ncoords)
+
+    # Convert transformation matrices (rotations) to quaternions
+    quaternions = []
+    for n in range(len(trMats)):
+        tomoMats = trMats[n]
+        quatertions_tomo = np.asarray([rotation_to_quaternion(tomoMats[idq]) for idq in range(len(tomoMats))])
+        quaternions.append(quatertions_tomo)
 
     inAllMicrographs = consensus <= 0 or consensus >= Ninputs
 
@@ -375,7 +382,7 @@ def consensusWorker(coords, vesicles, trMats, consensus, consensusRadius, posFn,
     if N0 > 0:
         allCoords[0:N0, :] = coords[0]
         allVesicles[0:N0] = vesicles[0]
-        allTr[0:N0] = trMats[0]
+        allQuaternions[0:N0] = quaternions[0]
         votes[0:N0] = 1
 
     # Add the rest of coordinates to 'allCoords' and 'votes' lists
@@ -383,30 +390,34 @@ def consensusWorker(coords, vesicles, trMats, consensus, consensusRadius, posFn,
     for n in range(firstInput, Ninputs):
         for idv in np.unique(vesicles[n]):
             coords_vesicle = coords[n][np.where(vesicles[n] == idv)]
-            tr_vesicle = trMats[n][np.where(vesicles[n] == idv)]
-            for coord, tr in zip(coords_vesicle, tr_vesicle):
+            q_vesicle = quaternions[n][np.where(vesicles[n] == idv)]
+            for coord, q in zip(coords_vesicle, q_vesicle):
                 if Ncurrent > 0:
                     dist = np.sum((coord - allCoords[0:Ncurrent]) ** 2, axis=1)
                     imin = np.argmin(dist)
                     if sqrt(dist[imin]) < consensusRadius:
                         newCoord = (votes[imin] * allCoords[imin,] + coord) / (
                                     votes[imin] + 1)
-                        inv_newTr = (votes[imin] * inverse_Transformation(allTr[imin,]) + inverse_Transformation(tr)) / (
-                                     votes[imin] + 1)
+                        # inv_newTr = (votes[imin] * inverse_Transformation(allTr[imin,]) + inverse_Transformation(tr)) / (
+                        #              votes[imin] + 1)
                         allCoords[imin,] = newCoord
-                        allTr[imin,] = inverse_Transformation(inv_newTr)
+                        # allTr[imin,] = inverse_Transformation(inv_newTr)
+                        tuple_q = (allQuaternions[imin,], q)
+                        T = weighted_tensor(tuple_q)
+                        q_bar, _ = mean_quaternion(T)
+                        allQuaternions[imin,] = q_bar
                         allVesicles[imin] = idv
                         votes[imin] += 1
                     else:
                         allCoords[Ncurrent, :] = coord
                         allVesicles[Ncurrent] = idv
-                        allTr[Ncurrent] = tr
+                        allQuaternions[Ncurrent] = q
                         votes[Ncurrent] = 1
                         Ncurrent += 1
                 else:
                     allCoords[Ncurrent, :] = coord
                     allVesicles[Ncurrent] = idv
-                    allTr[Ncurrent] = tr
+                    allQuaternions[Ncurrent] = q
                     votes[Ncurrent] = 1
                     Ncurrent += 1
 
@@ -418,12 +429,22 @@ def consensusWorker(coords, vesicles, trMats, consensus, consensusRadius, posFn,
 
     if mode==PICK_MODE_LARGER:
         consensusCoords = allCoords[votes >= consensus, :]
-        trConsensus = allTr[votes >= consensus]
+        qConsensus = allQuaternions[votes >= consensus]
         vesiclesConsensus = allVesicles[votes >= consensus]
     else:
         consensusCoords = allCoords[votes == consensus, :]
-        trConsensus = allTr[votes == consensus]
+        qConsensus = allQuaternions[votes == consensus]
         vesiclesConsensus = allVesicles[votes == consensus]
+
+    # Convert consensus quaternions back to consensus transformations
+    trConsensus = np.zeros([len(qConsensus), 4, 4])
+    print(qConsensus)
+    for idq, q in enumerate(qConsensus):
+        print(q)
+        tr = np.eye(4)
+        rot = quaternion_to_rotation(q)
+        tr[0:3, 0:3] = rot
+        trConsensus[idq,] = tr
 
     try:
         if jaccFn:
