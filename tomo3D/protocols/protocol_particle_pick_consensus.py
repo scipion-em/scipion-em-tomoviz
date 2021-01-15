@@ -210,8 +210,6 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
                 for idv in np.unique(vsIds):
                     vesicle_coords = coords[np.where(vsIds == idv)]
                     vesicle_tr = trMats[np.where(vsIds == idv)]
-                    # shell = delaunayTriangulation(vesicle_coords)
-                    # normals = computeNormals(shell)
                     if vesicle_coords.size == 3:  # special case with only one coordinate
                         vesicle_coords = [vesicle_coords]
                     for idx, coord in enumerate(vesicle_coords):
@@ -220,7 +218,6 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
                         newCoord.setVolume(tomograms[self.getTomoId(fnTmp)])
                         newCoord.setPosition(coord[0], coord[1], coord[2])
                         newCoord.setGroupId(idv)
-                        # matrix = rotation_matrix_from_vectors(normals[idx], np.array([0, 0, 1]))
                         matrix = vesicle_tr[idx]
                         if isinstance(self.inputCoordinates, list):
                             newCoord.setMatrix(matrix)
@@ -398,10 +395,7 @@ def consensusWorker(coords, vesicles, trMats, consensus, consensusRadius, posFn,
                     if sqrt(dist[imin]) < consensusRadius:
                         newCoord = (votes[imin] * allCoords[imin,] + coord) / (
                                     votes[imin] + 1)
-                        # inv_newTr = (votes[imin] * inverse_Transformation(allTr[imin,]) + inverse_Transformation(tr)) / (
-                        #              votes[imin] + 1)
                         allCoords[imin,] = newCoord
-                        # allTr[imin,] = inverse_Transformation(inv_newTr)
                         tuple_q = (allQuaternions[imin,], q)
                         T = weighted_tensor(tuple_q)
                         q_bar, _ = mean_quaternion(T)
