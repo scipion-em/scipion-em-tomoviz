@@ -115,10 +115,38 @@ def computeNormals(triangulation, associateCoords=False):
 
 def rotation_to_quaternion(rot, type="+"):
     q = np.zeros((1, 4))
-    q[0, 0] = 0.5 * np.sqrt(1 + rot[0, 0] + rot[1, 1] + rot[2, 2])
-    q[0, 1] = 0.5 * ((rot[2, 1] - rot[1, 2]) / np.abs(rot[2, 1] - rot[1, 2])) * np.sqrt(1 + rot[0, 0] - rot[1, 1] - rot[2, 2])
-    q[0, 2] = 0.5 * ((rot[0, 2] - rot[2, 0]) / np.abs(rot[0, 2] - rot[2, 0])) * np.sqrt(1 - rot[0, 0] + rot[1, 1] - rot[2, 2])
-    q[0, 3] = 0.5 * ((rot[1, 0] - rot[0, 1]) / np.abs(rot[1, 0] - rot[0, 1])) * np.sqrt(1 - rot[0, 0] - rot[1, 1] + rot[2, 2])
+    tr = rot[0, 0] + rot[1, 1] + rot[2, 2]
+    if tr > 0:
+        S = 2 * np.sqrt(tr + 1.0)
+        q[0, 0] = 0.25 * S
+        q[0, 1] = (rot[2, 1] - rot[1, 2]) / S
+        q[0, 2] = (rot[0, 2] - rot[2, 0]) / S
+        q[0, 3] = (rot[1, 0] - rot[0, 1]) / S
+    elif (rot[0, 0] > rot[1, 1]) and (rot[0, 0] > rot[2, 2]):
+        S = 2 * np.sqrt(1 + rot[0, 0] - rot[1, 1] - rot[2, 2])
+        q[0, 0] = (rot[2, 1] - rot[1, 2]) / S
+        q[0, 1] = 0.25 * S
+        q[0, 2] = (rot[0, 1] + rot[1, 0]) / S
+        q[0, 3] = (rot[0, 2] + rot[2, 0]) / S
+    elif rot[1, 1] > rot[2, 2]:
+        S = 2 * np.sqrt(1 - rot[0, 0] + rot[1, 1] - rot[2, 2])
+        q[0, 0] = (rot[0, 2] - rot[2, 0]) / S
+        q[0, 1] = (rot[0, 1] + rot[1, 0]) / S
+        q[0, 2] = 0.25 * S
+        q[0, 3] = (rot[1, 2] + rot[2, 1]) / S
+    else:
+        S = 2 * np.sqrt(1 - rot[0, 0] - rot[1, 1] + rot[2, 2])
+        q[0, 0] = (rot[1, 0] - rot[0, 1]) / S
+        q[0, 1] = (rot[2, 0] + rot[0, 2]) / S
+        q[0, 2] = (rot[1, 2] + rot[2, 1]) / S
+        q[0, 3] = 0.25 * S
+
+    # Old conversion
+    # q[0, 0] = 0.5 * np.sqrt(1 + rot[0, 0] + rot[1, 1] + rot[2, 2])
+    # q[0, 1] = 0.5 * ((rot[2, 1] - rot[1, 2]) / np.abs(rot[2, 1] - rot[1, 2])) * np.sqrt(1 + rot[0, 0] - rot[1, 1] - rot[2, 2])
+    # q[0, 2] = 0.5 * ((rot[0, 2] - rot[2, 0]) / np.abs(rot[0, 2] - rot[2, 0])) * np.sqrt(1 - rot[0, 0] + rot[1, 1] - rot[2, 2])
+    # q[0, 3] = 0.5 * ((rot[1, 0] - rot[0, 1]) / np.abs(rot[1, 0] - rot[0, 1])) * np.sqrt(1 - rot[0, 0] - rot[1, 1] + rot[2, 2])
+    
     if type == "+":
         return q
     elif type == "-":
