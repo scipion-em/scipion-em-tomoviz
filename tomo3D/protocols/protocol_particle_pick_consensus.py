@@ -432,9 +432,7 @@ def consensusWorker(coords, vesicles, trMats, consensus, consensusRadius, posFn,
 
     # Convert consensus quaternions back to consensus transformations
     trConsensus = np.zeros([len(qConsensus), 4, 4])
-    print(qConsensus)
     for idq, q in enumerate(qConsensus):
-        print(q)
         tr = np.eye(4)
         rot = quaternion_to_rotation(q)
         tr[0:3, 0:3] = rot
