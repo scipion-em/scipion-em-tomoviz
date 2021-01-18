@@ -146,7 +146,7 @@ def rotation_to_quaternion(rot, type="+"):
     # q[0, 1] = 0.5 * ((rot[2, 1] - rot[1, 2]) / np.abs(rot[2, 1] - rot[1, 2])) * np.sqrt(1 + rot[0, 0] - rot[1, 1] - rot[2, 2])
     # q[0, 2] = 0.5 * ((rot[0, 2] - rot[2, 0]) / np.abs(rot[0, 2] - rot[2, 0])) * np.sqrt(1 - rot[0, 0] + rot[1, 1] - rot[2, 2])
     # q[0, 3] = 0.5 * ((rot[1, 0] - rot[0, 1]) / np.abs(rot[1, 0] - rot[0, 1])) * np.sqrt(1 - rot[0, 0] - rot[1, 1] + rot[2, 2])
-    
+
     if type == "+":
         return q
     elif type == "-":
