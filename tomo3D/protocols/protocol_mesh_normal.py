@@ -29,7 +29,7 @@
 from os import path
 import numpy as np
 from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, IntParam
-import pyworkflow.utils as pwutlis
+import pyworkflow.utils as pwutils
 import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
 from tomo.objects import Coordinate3D
@@ -95,9 +95,24 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         inMeshes = self.inputMeshes.get()
         if normalBool:
             tol = self.tol.get() * np.pi / 180
-            meshDict = {}
-            for mesh in inMeshes:
-                meshDict[mesh.getGroup()] = mesh.getObjId()
+
+            groupIdList = []
+            tomoNameList = []
+            for meshPoint in inMeshes:
+                groupId = meshPoint.getGroupId()
+                if groupId not in groupIdList:
+                    groupIdList.append(groupId)
+                    tomoNameList.append(meshPoint.getVolName())
+
+            meshDict = self._initDictVesicles(inMeshes, groupIdList, tomoNameList)
+
+            for meshPoint in inMeshes:
+                if meshDict[meshPoint.getGroupId()]["tomoName"][0] == meshPoint.getVolName():
+                    meshDict[meshPoint.getGroupId()]["points"].append(meshPoint.getPosition())
+
+            for i in meshDict:
+                meshDict[i]["normals"] = self._getNormalVesicleList(np.asarray(meshDict[i]["points"]))
+                # TODO: normals are not computed! => points are not in adecuate format for delaunayTriangulation() ??
 
         self.outSet = self._createSetOfSubTomograms()
         self.outSet.copyInfo(inSet)
@@ -107,40 +122,35 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                 tilt = self._getTiltSubtomo(subtomo)
                 if self.maxtilt.get() > tilt > self.mintilt.get():
                     if normalBool:
-                        meshfromDict = inMeshes[meshDict[self._getVesicleId(subtomo)]]
-                        if pwutlis.removeBaseExt(path.basename(meshfromDict.getPath())).split('_vesicle_')[0] == \
-                                pwutlis.removeBaseExt(path.basename(subtomo.getVolName())):
-                            self._filterByNormal(subtomo, tol, meshfromDict)
+                        self._filterByNormal(subtomo, tol, meshDict)
                     else:
                         self.outSet.append(subtomo)
 
         if normalBool and not tiltBool:
             for subtomo in inSet:
-                meshfromDict = inMeshes[meshDict[self._getVesicleId(subtomo)]]
-                if pwutlis.removeBaseExt(path.basename(meshfromDict.getPath())).split('_vesicle_')[0] == \
-                        pwutlis.removeBaseExt(path.basename(subtomo.getVolName())):
-                    self._filterByNormal(subtomo, tol, meshfromDict)
+                self._filterByNormal(subtomo, tol, meshDict)
 
     def createOutputStep(self):
         # Create setOfCoordinates3D from SetOfMeshes in order to use PyVista viewer
         inputMeshes = self.inputMeshes.get()
-        meshCoords = self._createSetOfCoordinates3D(inputMeshes.getVolumes())
-        for mesh in inputMeshes:
-            incoords = mesh.getMesh()
-            meshId = mesh.getVolId()
-            meshGroup = mesh.getGroup()
-            for coord in incoords:
-                outcoord = Coordinate3D()
-                outcoord.setX(coord[0])
-                outcoord.setY(coord[1])
-                outcoord.setZ(coord[2])
-                outcoord.setGroupId(meshGroup)
-                outcoord.setVolId(meshId)
-                meshCoords.append(outcoord)
+        # TODO: If inputMeshes works as mesh in viewer, this setOfCoordinates is no longer needed
+        # meshCoords = self._createSetOfCoordinates3D(inputMeshes.getPrecedents())
+        # for meshPoint in inputMeshes:
+        #     incoords = meshPoint.getMesh()
+        #     meshId = meshPoint.getVolId()
+        #     meshGroup = meshPoint.getGroupId()
+        #     for coord in incoords:
+        #         outcoord = Coordinate3D()
+        #         outcoord.setX(coord[0])
+        #         outcoord.setY(coord[1])
+        #         outcoord.setZ(coord[2])
+        #         outcoord.setGroupId(meshGroup)
+        #         outcoord.setVolId(meshId)
+        #         meshCoords.append(outcoord)
         self._defineOutputs(outputset=self.outSet)
-        self._defineOutputs(meshCoords=meshCoords)
+        # self._defineOutputs(meshCoords=meshCoords)
         self._defineSourceRelation(self.inputSubtomos.get(), self.outSet)
-        self._defineSourceRelation(inputMeshes, meshCoords)
+        # self._defineSourceRelation(inputMeshes, meshCoords)
 
     # --------------------------- INFO functions --------------------------------
     def _validate(self):
@@ -188,8 +198,8 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
             vesicleId = 1
         return vesicleId
 
-    def _getNormalVesicleList(self, mesh):
-        triangulation = delaunayTriangulation(mesh.getMesh())
+    def _getNormalVesicleList(self, points):
+        triangulation = delaunayTriangulation(points)
         normalsList = computeNormals(triangulation, associateCoords=True)
         return normalsList
 
@@ -207,10 +217,50 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         tilt = -np.rad2deg(tilt)
         return tilt
 
-    def _filterByNormal(self, subtomo, tol, mesh):
-        normalsList = self._getNormalVesicleList(mesh)
-        normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
-        if abs(normSubtomo[0] - normVesicle[0]) < tol \
-                and abs(normSubtomo[1] - normVesicle[1]) < tol \
-                and abs(normSubtomo[2] - normVesicle[2]) < tol:
-            self.outSet.append(subtomo)
+    def _filterByNormal(self, subtomo, tol, meshDict):
+        meshfromDict = meshDict[self._getVesicleId(subtomo)]
+        if meshfromDict["tomoName"][0] == subtomo.getVolName():
+            normSubtomo, normVesicle = self._getNormalVesicle(meshfromDict["normals"], subtomo)
+            if abs(normSubtomo[0] - normVesicle[0]) < tol and abs(normSubtomo[1] - normVesicle[1]) < tol and \
+                    abs(normSubtomo[2] - normVesicle[2]) < tol:
+                self.outSet.append(subtomo)
+
+    def _initDictVesicles(self, meshes, groupIdList, tomoNameList):
+        numberOfMeshes = meshes.getNumberOfMeshes()
+        # tomos = meshes.getPrecedents()
+        # volIds = meshes.aggregate(["MAX"], "_volId", ["_volId"])
+        # volIds = [d['_volId'] for d in volIds]
+        # tomoNames = [pwutils.removeBaseExt(tomos[volId].getFileName()) for volId in volIds]
+        dictVesicles = {key: {'tomoName': [tomoName], 'points': [], 'normals': []}
+                        for key, tomoName in zip(groupIdList, tomoNameList)}
+        return dictVesicles
+
+        # def _filterByNormal(self, subtomo, tol, mesh):
+        # normalsList = self._getNormalVesicleList(mesh)
+        # normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
+        # if abs(normSubtomo[0] - normVesicle[0]) < tol \
+        #         and abs(normSubtomo[1] - normVesicle[1]) < tol \
+        #         and abs(normSubtomo[2] - normVesicle[2]) < tol:
+        #     self.outSet.append(subtomo)
+
+        # for mesh in self.inputMeshes.get().iterItems():
+        #     pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
+        #     if pwutlis.removeBaseExt(path.basename(subtomo.getVolName())) == pathV[0]:
+        #         if str(self._getVesicleId(subtomo)) == pathV[1]:
+        #             normalsList = self._getNormalVesicleList(mesh)
+        #             normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
+        #             if abs(normSubtomo[0] - normVesicle[0]) < tol \
+        #                     and abs(normSubtomo[1] - normVesicle[1]) < tol \
+        #                     and abs(normSubtomo[2] - normVesicle[2]) < tol:
+        #                 self.outSet.append(subtomo)
+
+        # for mesh in self.inputMeshes.get().iterItems():
+        #     pathV = pwutlis.removeBaseExt(path.basename(mesh.getPath())).split('_vesicle_')
+        #     if pwutlis.removeBaseExt(path.basename(subtomo.getVolName())) == pathV[0]:
+        #         if str(self._getVesicleId(subtomo)) == pathV[1]:
+        #             normalsList = self._getNormalVesicleList(mesh)
+        #             normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
+        #             if abs(normSubtomo[0] - normVesicle[0]) < tol \
+        #                     and abs(normSubtomo[1] - normVesicle[1]) < tol \
+        #                     and abs(normSubtomo[2] - normVesicle[2]) < tol:
+        #                 self.outSet.append(subtomo)
