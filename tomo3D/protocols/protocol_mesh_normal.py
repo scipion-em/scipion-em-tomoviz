@@ -97,13 +97,12 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
             tol = self.tol.get() * np.pi / 180
 
             groupIdList = []
-            tomoNameList = list()
+            tomoNameList = []
             for meshPoint in inMeshes:
                 groupId = meshPoint.getGroupId()
                 if groupId not in groupIdList:
                     groupIdList.append(groupId)
-                    tomoNameList.append(meshPoint.getVolName())  # TODO: SIEMPRE SE GUARDA EL ULTIMO TOMONAME!! => no se
-                    # TODO: sobreescribe si son ints => dict ints (objId => volName?)
+                    tomoNameList.append(str(meshPoint.getVolName()))
 
             meshDict = {key: {'tomoName': [tomoName], 'points': [], 'normals': []}
                         for key, tomoName in zip(groupIdList, tomoNameList)}
@@ -113,10 +112,7 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                     meshDict[meshPoint.getGroupId()]["points"].append(meshPoint.getPosition())
 
             for i in meshDict:
-                print('-----------tomoName----------', meshDict[i]["tomoName"][0])
                 meshDict[i]["normals"] = self._getNormalVesicleList(np.asarray(meshDict[i]["points"]))
-                # print('-----------normals----------', np.asarray(meshDict[i]["normals"]))
-
 
         self.outSet = self._createSetOfSubTomograms()
         self.outSet.copyInfo(inSet)
