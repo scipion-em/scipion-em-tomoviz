@@ -102,13 +102,13 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                 groupId = meshPoint.getGroupId()
                 if groupId not in groupIdList:
                     groupIdList.append(groupId)
-                    tomoNameList.append(str(meshPoint.getVolName()))
+                    tomoNameList.append(str(meshPoint.getVolumeName()))
 
             meshDict = {key: {'tomoName': [tomoName], 'points': [], 'normals': []}
                         for key, tomoName in zip(groupIdList, tomoNameList)}
 
             for meshPoint in inMeshes:
-                if meshDict[meshPoint.getGroupId()]["tomoName"][0] == meshPoint.getVolName():
+                if meshDict[meshPoint.getGroupId()]["tomoName"][0] == meshPoint.getVolumeName():
                     meshDict[meshPoint.getGroupId()]["points"].append(meshPoint.getPosition())
 
             for i in meshDict:
