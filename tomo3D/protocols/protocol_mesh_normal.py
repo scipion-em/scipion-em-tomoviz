@@ -41,7 +41,7 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
     """ This protocol takes surfaces or ROIs (SetOfMeshes) and a SetOfSubtomograms or SetOfCoordinates3D with
     transformation matrix and filters them by different criteria related with the normal direction."""
 
-    _label = 'filter subtomos by normal'
+    _label = 'filter by normal'
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
