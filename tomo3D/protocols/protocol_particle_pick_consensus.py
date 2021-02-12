@@ -39,7 +39,8 @@ import pyworkflow.protocol.params as params
 from pyworkflow.protocol.constants import *
 from pyworkflow.utils import getFiles, removeBaseExt, moveFile, removeExt
 
-from ..utils import *
+from pwem.convert.transformations import quaternion_from_matrix, weighted_tensor,\
+                                         mean_quaternion, quaternion_matrix
 
 from tomo.protocols import ProtTomoPicking
 from tomo.objects import SetOfCoordinates3D, Coordinate3D
@@ -356,14 +357,14 @@ def consensusWorker(coords, vesicles, trMats, consensus, consensusRadius, posFn,
     Ncoords = sum([x.shape[0] for x in coords])
     allCoords = np.zeros([Ncoords, 3])
     allVesicles = np.zeros([Ncoords])
-    allQuaternions = np.zeros([Ncoords, 1, 4])
+    allQuaternions = np.zeros([Ncoords, 4])
     votes = np.zeros(Ncoords)
 
     # Convert transformation matrices (rotations) to quaternions
     quaternions = []
     for n in range(len(trMats)):
         tomoMats = trMats[n]
-        quatertions_tomo = np.asarray([rotation_to_quaternion(tomoMats[idq]) for idq in range(len(tomoMats))])
+        quatertions_tomo = np.asarray([quaternion_from_matrix(tomoMats[idq]) for idq in range(len(tomoMats))])
         quaternions.append(quatertions_tomo)
 
     inAllMicrographs = consensus <= 0 or consensus >= Ninputs
@@ -433,9 +434,7 @@ def consensusWorker(coords, vesicles, trMats, consensus, consensusRadius, posFn,
     # Convert consensus quaternions back to consensus transformations
     trConsensus = np.zeros([len(qConsensus), 4, 4])
     for idq, q in enumerate(qConsensus):
-        tr = np.eye(4)
-        rot = quaternion_to_rotation(q)
-        tr[0:3, 0:3] = rot
+        tr = quaternion_matrix(q)
         trConsensus[idq,] = tr
 
     try:
