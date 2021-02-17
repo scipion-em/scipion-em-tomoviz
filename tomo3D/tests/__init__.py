@@ -40,6 +40,6 @@ DataSet(name='tomo-em', folder='tomo-em',
 
 DataSet(name='reliontomo', folder='reliontomo',
         files={
-               'tomo1': '64K_defocus_m2_tomo_10_bin1_WBP_CatBinned1.mrc',
-               'tomo2': '64K_defocus_m2_tomo_12_bin1_WBP_CatBinned1.mrc',
+               'tomo1': 'defocus_m2_tomo_10_bin1_WBP_CatBinned1.mrc',
+               'tomo2': 'defocus_m2_tomo_12_bin1_WBP_CatBinned1.mrc',
         })
