@@ -29,20 +29,19 @@
 from os import path
 import numpy as np
 from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, IntParam
-import pyworkflow.utils as pwutlis
 import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
-from tomo.objects import Coordinate3D
+from tomo.objects import SubTomogram, Coordinate3D
 from tomo.protocols import ProtTomoBase
 from tomo.utils import normalFromMatrix
 from ..utils import delaunayTriangulation, computeNormals
 
 
 class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
-    """ This protocol takes surfaces or ROIs (SetOfMeshes) and a SetOfSubtomograms and filters them by different
-    criteria related with the normal direction."""
+    """ This protocol takes surfaces or ROIs (SetOfMeshes) and a SetOfSubtomograms or SetOfCoordinates3D with
+    transformation matrix and filters them by different criteria related with the normal direction."""
 
-    _label = 'filter subtomos by normal'
+    _label = 'filter by normal'
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
@@ -50,26 +49,27 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputSubtomos', PointerParam, pointerClass="SetOfSubTomograms",
-                      label='Subtomograms', help='SetOfSubtomograms to filter.')
+        form.addParam('input', PointerParam, pointerClass="SetOfSubTomograms, SetOfCoordinates3D",
+                      label='Subtomograms/Coordinates', help='SetOfSubtomograms to filter.')
         form.addParam('inputMeshes', PointerParam, label="Vesicles", pointerClass='SetOfMeshes',
-                      help='Select the vesicles in which the subtomograms are.')
+                      help='Select the vesicles in which the subtomograms/coordinates are.')
         form.addParam('tilt', BooleanParam, default=False,
-                      label='Filter subtomograms by tilt angle',
-                      help='Remove subtomograms depending on their tilt angle.')
+                      label='Filter by tilt angle',
+                      help='Remove items depending on their tilt angle.')
         form.addParam('maxtilt', IntParam, default=150, label='Maximum allowed tilt', condition='tilt',
-                      help='Remove the subtomograms that have a tilt angle bigger than the one specified in here, '
+                      help='Remove the items that have a tilt angle bigger than the one specified in here, '
                            'considering tilt angle between 0 and 180 degrees.')
         form.addParam('mintilt', IntParam, default=30, label='Minimum allowed tilt', condition='tilt',
-                      help='Remove the subtomograms that have a tilt angle smaller than the one specified in here, '
+                      help='Remove the items that have a tilt angle smaller than the one specified in here, '
                            'considering tilt angle between 0 and 180 degrees.')
         form.addParam('normalDir', BooleanParam, default=True,
-                      label='Filter subtomograms by normal',
-                      help='Remove the subtomograms that have a normal direction not equal to the normal direction of '
+                      label='Filter by normal',
+                      help='Remove the items that have a normal direction not equal to the normal direction of '
                            'the vesicle in the coordinate of the particle.')
         form.addParam('tol', FloatParam, default=5, label='Tolerance in degrees',
                       condition='normalDir',
-                      help='Tolerance (in degrees) when comparing between particle and mesh normal directions.')
+                      help='Tolerance (in degrees) when comparing between subtomogram/coordinate and mesh normal '
+                           'directions.')
 
         # form.addParam('topBottom', BooleanParam, default=True,
         #               label='Remove subtomograms in the top and bottom of the vesicle',
@@ -89,89 +89,99 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
 
     # --------------------------- STEPS functions -------------------------------
     def computeNormalStep(self):
-        inSet = self.inputSubtomos.get()
+        inSet = self.input.get()
         tiltBool = self.tilt.get()
         normalBool = self.normalDir.get()
         inMeshes = self.inputMeshes.get()
         if normalBool:
             tol = self.tol.get() * np.pi / 180
-            meshDict = {}
-            for mesh in inMeshes:
-                meshDict[mesh.getGroup()] = mesh.getObjId()
 
-        self.outSet = self._createSetOfSubTomograms()
+            groupIdList = []
+            tomoNameList = []
+            for meshPoint in inMeshes:
+                groupId = meshPoint.getGroupId()
+                if groupId not in groupIdList:
+                    groupIdList.append(groupId)
+                    tomoNameList.append(str(meshPoint.getVolumeName()))
+
+            meshDict = {key: {'tomoName': [tomoName], 'points': [], 'normals': []}
+                        for key, tomoName in zip(groupIdList, tomoNameList)}
+
+            for meshPoint in inMeshes:
+                if meshDict[meshPoint.getGroupId()]["tomoName"][0] == meshPoint.getVolumeName():
+                    meshDict[meshPoint.getGroupId()]["points"].append(meshPoint.getPosition())
+
+            for i in meshDict:
+                meshDict[i]["normals"] = self._getNormalVesicleList(np.asarray(meshDict[i]["points"]))
+
+        if self._getInputisSubtomo(inSet.getFirstItem()):
+            self.outSet = self._createSetOfSubTomograms()
+        else:
+            self.outSet = self._createSetOfCoordinates3D(inMeshes.getPrecedents())
         self.outSet.copyInfo(inSet)
 
         if tiltBool:
-            for subtomo in inSet:
-                tilt = self._getTiltSubtomo(subtomo)
-                if self.maxtilt.get() > tilt > self.mintilt.get():
-                    if normalBool:
-                        meshfromDict = inMeshes[meshDict[self._getVesicleId(subtomo)]]
-                        if pwutlis.removeBaseExt(path.basename(meshfromDict.getPath())).split('_vesicle_')[0] == \
-                                pwutlis.removeBaseExt(path.basename(subtomo.getVolName())):
-                            self._filterByNormal(subtomo, tol, meshfromDict)
-                    else:
-                        self.outSet.append(subtomo)
+            if self._getInputisSubtomo(inSet.getFirstItem()):
+                for item in inSet:
+                    tilt = self._getTilt(item)
+                    if self.maxtilt.get() > tilt > self.mintilt.get():
+                        if normalBool:
+                            self._filterByNormal(item, tol, meshDict)
+                        else:
+                            self.outSet.append(item)
+            else:
+                for item in inSet.iterCoordinates(volume=None):
+                    tilt = self._getTilt(item)
+                    if self.maxtilt.get() > tilt > self.mintilt.get():
+                        if normalBool:
+                            self._filterByNormal(item, tol, meshDict)
+                        else:
+                            self.outSet.append(item)
 
         if normalBool and not tiltBool:
-            for subtomo in inSet:
-                meshfromDict = inMeshes[meshDict[self._getVesicleId(subtomo)]]
-                if pwutlis.removeBaseExt(path.basename(meshfromDict.getPath())).split('_vesicle_')[0] == \
-                        pwutlis.removeBaseExt(path.basename(subtomo.getVolName())):
-                    self._filterByNormal(subtomo, tol, meshfromDict)
+            if self._getInputisSubtomo(inSet.getFirstItem()):
+                for item in inSet:
+                    self._filterByNormal(item, tol, meshDict)
+            else:
+                for item in inSet.iterCoordinates(volume=None):
+                    self._filterByNormal(item, tol, meshDict)
 
     def createOutputStep(self):
-        # Create setOfCoordinates3D from SetOfMeshes in order to use PyVista viewer
-        inputMeshes = self.inputMeshes.get()
-        meshCoords = self._createSetOfCoordinates3D(inputMeshes.getVolumes())
-        for mesh in inputMeshes:
-            incoords = mesh.getMesh()
-            meshId = mesh.getVolId()
-            meshGroup = mesh.getGroup()
-            for coord in incoords:
-                outcoord = Coordinate3D()
-                outcoord.setX(coord[0])
-                outcoord.setY(coord[1])
-                outcoord.setZ(coord[2])
-                outcoord.setGroupId(meshGroup)
-                outcoord.setVolId(meshId)
-                meshCoords.append(outcoord)
         self._defineOutputs(outputset=self.outSet)
-        self._defineOutputs(meshCoords=meshCoords)
-        self._defineSourceRelation(self.inputSubtomos.get(), self.outSet)
-        self._defineSourceRelation(inputMeshes, meshCoords)
+        self._defineSourceRelation(self.input.get(), self.outSet)
 
     # --------------------------- INFO functions --------------------------------
     def _validate(self):
         validateMsgs = []
         if not self.normalDir.get() and not self.tilt.get():
             validateMsgs.append('Some filter should be switched to "Yes"')
+        if not self.input.get().getFirstItem().hasTransform():
+            validateMsgs.append('Input coordinates/subtomograms should have transform matrix.')
         return validateMsgs
 
     def _summary(self):
         summary = []
         if not self.isFinished():
-            summary.append("Output subtomograms not ready yet.")
+            summary.append("Output subtomograms/coordinates not ready yet.")
         else:
             if self.tilt:
-                summary.append("Remove subtomograms by tilt angle (max allowed tilt: %d, min allowed tilt: %d)" %
+                summary.append("Remove input items by tilt angle (max allowed tilt: %d, min allowed tilt: %d)" %
                                (self.maxtilt.get(), self.mintilt.get()))
             if self.normalDir:
-                summary.append("Remove subtomograms by normal direction (tolerance of %0.2f degrees)" %
+                summary.append("Remove input items by normal direction (tolerance of %0.2f degrees)" %
                                self.tol.get())
         return summary
 
     def _methods(self):
         methods = []
         if not self.isFinished():
-            methods.append("Output subtomograms not ready yet.")
+            methods.append("Output subtomograms/coordinates not ready yet.")
         else:
             if self.tilt:
-                methods.append("Subtomograms with tilt angle bigger than %d or smaller than %d have been removed." %
+                methods.append("Input items with tilt angle bigger than %d or smaller than %d have been removed." %
                                (self.maxtilt.get(), self.mintilt.get()))
             if self.normalDir:
-                methods.append("Subtomograms that are not perpendicular to the membrane have been removed.")
+                methods.append("Input items that are not perpendicular to the membrane have been removed.")
 
             # if self.topBottom:
             #     methods.append("Particles in the top and bottom parts of the vesicles have been removed.")
@@ -180,37 +190,53 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         return methods
 
     # --------------------------- UTILS functions --------------------------------------------
-    def _getVesicleId(self, subtomo):
-        c = subtomo.getCoordinate3D()
+    def _getInputisSubtomo(self, item):
+        if isinstance(item, SubTomogram):
+            return True
+        else:
+            return False
+
+    def _getVesicleId(self, item):
+        if isinstance(item, SubTomogram):
+            c = item.getCoordinate3D()
+        else:
+            c = item
         if c.hasGroupId():
             vesicleId = c.getGroupId()
-        else:  # For now it works with several vesicles in the same tomo just for Pyseg subtomos
+        else:  # For now it works with several vesicles in the same tomo just for input items with groupId
             vesicleId = 1
         return vesicleId
 
-    def _getNormalVesicleList(self, mesh):
-        triangulation = delaunayTriangulation(mesh.getMesh())
+    def _getNormalVesicleList(self, points):
+        triangulation = delaunayTriangulation(points)
         normalsList = computeNormals(triangulation, associateCoords=True)
         return normalsList
 
-    def _getNormalVesicle(self, normalsList, subtomo):
-        normSubtomo = normalFromMatrix(subtomo.getTransform().getMatrix())
-        coord = subtomo.getCoordinate3D()
+    def _getNormalVesicle(self, normalsList, item):
+        if self._getInputisSubtomo(item):
+            normSubtomo = normalFromMatrix(item.getTransform().getMatrix())
+            coord = item.getCoordinate3D()
+        else:
+            normSubtomo = normalFromMatrix(item.getMatrix())
+            coord = item
         coors = np.asarray([coord.getX(), coord.getY(), coord.getZ()])
         points, normals = zip(*normalsList)
         points = np.asarray(points)
         idx = np.argmin(np.sum((points - coors) ** 2, axis=1))
         return normSubtomo, normals[idx]
 
-    def _getTiltSubtomo(self, subtomo):
-        _, tilt, _ = tfs.euler_from_matrix(subtomo.getTransform().getMatrix(), axes='szyz')
+    def _getTilt(self, item):
+        if self._getInputisSubtomo(item):
+            _, tilt, _ = tfs.euler_from_matrix(item.getTransform().getMatrix(), axes='szyz')
+        else:
+            _, tilt, _ = tfs.euler_from_matrix(item.getMatrix(), axes='szyz')
         tilt = -np.rad2deg(tilt)
         return tilt
 
-    def _filterByNormal(self, subtomo, tol, mesh):
-        normalsList = self._getNormalVesicleList(mesh)
-        normSubtomo, normVesicle = self._getNormalVesicle(normalsList, subtomo)
-        if abs(normSubtomo[0] - normVesicle[0]) < tol \
-                and abs(normSubtomo[1] - normVesicle[1]) < tol \
-                and abs(normSubtomo[2] - normVesicle[2]) < tol:
-            self.outSet.append(subtomo)
+    def _filterByNormal(self, item, tol, meshDict):
+        meshfromDict = meshDict[self._getVesicleId(item)]
+        if meshfromDict["tomoName"][0] == path.basename(item.getVolName()):
+            normSubtomo, normVesicle = self._getNormalVesicle(meshfromDict["normals"], item)
+            if abs(normSubtomo[0] - normVesicle[0]) < tol and abs(normSubtomo[1] - normVesicle[1]) < tol and \
+                    abs(normSubtomo[2] - normVesicle[2]) < tol:
+                self.outSet.append(item)

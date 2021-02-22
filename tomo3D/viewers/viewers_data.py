@@ -62,7 +62,7 @@ class Tomo3DDataViewer(pwviewer.Viewer):
         if issubclass(cls, tomo.objects.SetOfCoordinates3D):
             outputCoords = obj
         elif issubclass(cls, EMProtocol):
-            outputCoords = obj.meshCoords
+            outputCoords = obj.inputMeshes.get()
 
         tomos = outputCoords.getPrecedents()
 
