@@ -44,6 +44,7 @@ from pwem.convert.transformations import quaternion_from_matrix, weighted_tensor
 
 from tomo.protocols import ProtTomoPicking
 from tomo.objects import SetOfCoordinates3D, Coordinate3D
+import tomo.constants as const
 
 PICK_MODE_LARGER = 0
 PICK_MODE_EQUAL = 1
@@ -217,7 +218,7 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
                         newCoord = Coordinate3D()
                         tomograms = self.getMainInput().getPrecedents()
                         newCoord.setVolume(tomograms[self.getTomoId(fnTmp)])
-                        newCoord.setPosition(coord[0], coord[1], coord[2])
+                        newCoord.setPosition(coord[0], coord[1], coord[2], const.SCIPION)
                         newCoord.setGroupId(idv)
                         matrix = vesicle_tr[idx]
                         if isinstance(self.inputCoordinates, list):
@@ -277,7 +278,7 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
         vesicles = []
         transformations = []
         for idx, coordinates in enumerate(self.inputCoordinates):
-            coordArray = np.asarray([x.getPosition() for x in
+            coordArray = np.asarray([x.getPosition(const.SCIPION) for x in
                                      coordinates.get().iterCoordinates(tomoId)],
                                      dtype=float)
             vIds = np.asarray([x.getGroupId() for x in
