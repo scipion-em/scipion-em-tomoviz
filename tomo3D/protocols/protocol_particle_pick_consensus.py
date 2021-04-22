@@ -34,6 +34,7 @@ import os
 from math import sqrt
 import numpy as np
 
+from pyworkflow import BETA
 from pyworkflow.object import Set, Pointer
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol.constants import *
@@ -70,6 +71,7 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
     """
 
     _label = 'picking consensus'
+    _devStatus = BETA
     outputName = 'consensusCoordinates'
     FN_PREFIX = 'consensusCoords_'
 

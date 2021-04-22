@@ -28,6 +28,7 @@
 
 from os import path
 import numpy as np
+from pyworkflow import BETA
 from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, IntParam
 import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
@@ -43,6 +44,7 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
     transformation matrix and filters them by different criteria related with the normal direction."""
 
     _label = 'filter by normal'
+    _devStatus = BETA
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)

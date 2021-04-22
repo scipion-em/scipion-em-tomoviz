@@ -31,6 +31,7 @@ Consensus picking protocol
 
 import numpy as np
 
+from pyworkflow import BETA
 import pyworkflow.protocol.params as params
 from pyworkflow.utils import getFiles, removeBaseExt
 
@@ -47,6 +48,7 @@ class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
     """
 
     _label = 'remove duplicates'
+    _devStatus = BETA
     outputName = 'outputCoordinates'
     FN_PREFIX = 'purgedCoords_'
 
