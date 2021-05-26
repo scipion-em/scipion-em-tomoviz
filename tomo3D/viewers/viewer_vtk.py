@@ -42,32 +42,42 @@ class VtkPlot(object):
          plt.initializePlot()
     '''
 
-    def __init__(self, vti_file=None, graph_file=None, net_file=None):
+    def __init__(self, vti_file=None, graph_file=None, net_file=None, peaks_file=None):
         self.vti = pv.read(vti_file) if vti_file is not None else None
         self.graph = pv.read(graph_file) if graph_file is not None else None
         self.net = pv.read(net_file) if net_file is not None else None
+        self.peaks = pv.read(peaks_file) if peaks_file is not None else None
 
         self.plt = pv.Plotter()
 
         pos = 0.
 
         if self.vti:
-            pos += 65.
+            pos += 45.
             self.buttonVti = self.plt.add_checkbox_button_widget(callback=self.plotVti, position=(pos, 10.))
             self.plt.add_text('Tomogram', position=(pos, 65.), font_size=12)
-            pos += 200.
+            pos += 170.
             self.buttonSliceVti = self.plt.add_checkbox_button_widget(callback=self.toogleSlice, position=(pos, 10.))
             self.plt.add_text('Slice Mode', position=(pos, 65.), font_size=12)
 
         if self.graph:
-            pos += 200. if pos != 0 else 65.
+            pos += 170. if pos != 0 else 45.
             self.plt.add_text('Graph', position=(pos, 65.), font_size=12)
             self.buttonGraph = self.plt.add_checkbox_button_widget(callback=self.plotGraph, position=(pos, 10.))
 
         if self.net:
-            pos += 200. if pos != 0 else 65.
+            pos += 170. if pos != 0 else 45.
             self.plt.add_text('Net', position=(pos, 65.), font_size=12)
             self.buttonNet = self.plt.add_checkbox_button_widget(callback=self.plotNet, position=(pos, 10.))
+
+        if self.peaks:
+            self.peaks.set_active_vectors('smb_normal')
+            pos += 170. if pos != 0 else 45.
+            self.plt.add_text('Peaks', position=(pos, 65.), font_size=12)
+            self.buttonPeaks = self.plt.add_checkbox_button_widget(callback=self.plotPeaks, position=(pos, 10.))
+            pos += 170.
+            self.buttonVectors = self.plt.add_checkbox_button_widget(callback=self.plotVectors, position=(pos, 10.))
+            self.plt.add_text('Directions', position=(pos, 65.), font_size=12)
 
     def plotVti(self, value):
         if value:
@@ -114,6 +124,21 @@ class VtkPlot(object):
         else:
             self.plt.remove_actor(self.net_actor)
 
+    def plotPeaks(self, value):
+        mag = 0.02 * self.vti.dimensions[0]
+        if value:
+            self.peaks_actor = self.plt.add_points(self.peaks, color="green", point_size=mag,
+                                                   render_points_as_spheres=True, show_scalar_bar=False)
+        else:
+            self.plt.remove_actor(self.peaks_actor)
+
+    def plotVectors(self, value):
+        mag = 0.05 * self.vti.dimensions[0]
+        if value:
+            self.vectors_actor = self.plt.add_arrows(self.peaks.points, self.peaks.active_vectors, color="red",
+                                                     mag=mag)
+        else:
+            self.plt.remove_actor(self.vectors_actor)
 
     def initializePlot(self):
         self.plt.show()
