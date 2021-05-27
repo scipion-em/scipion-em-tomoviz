@@ -40,7 +40,7 @@ class VtkPlot(object):
          - peaks_file (Optional): File containing Peaks - Coordinates (PolyData VTK Object)
     Usage:
          import VtkPlot
-         plt = VtkPlot(vti_file=path_vti, graph_file=path_graph, net_file=path_net)
+         plt = VtkPlot(vti_file=path_vti, graph_file=path_graph, net_file=path_net, peaks_file=path_peaks)
          plt.initializePlot()
     '''
 
