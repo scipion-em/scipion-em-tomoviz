@@ -37,6 +37,7 @@ class VtkPlot(object):
          - vti_file (Optional): File containing a Volume (Volume VTK Object)
          - graph_file (Optional): File containing a Graph (PolyData VTK Object)
          - net_file (Optional): File containing a Net (PolyData VTK Object)
+         - peaks_file (Optional): File containing Peaks - Coordinates (PolyData VTK Object)
     Usage:
          import VtkPlot
          plt = VtkPlot(vti_file=path_vti, graph_file=path_graph, net_file=path_net)
