@@ -25,6 +25,7 @@
 # *
 # **************************************************************************
 
+import pyvistaqt as pvqt
 import pyvista as pv
 from pyvista.utilities import generate_plane
 import vtk
@@ -48,9 +49,29 @@ class VtkPlot(object):
         self.net = pv.read(net_file) if net_file is not None else None
         self.peaks = pv.read(peaks_file) if peaks_file is not None else None
 
-        self.plt = pv.Plotter()
+        self.vti_actor = None
+        self.graph_actor = None
+        self.net_actor = None
+        self.peaks_actor = None
+        self.vectors_actor = None
+
+        self.plt = pvqt.BackgroundPlotter()
+        self.plt.main_menu.clear()
 
         pos = 0.
+
+        def function_builder(vtk_obj, vtk_actor, vtk_button, vtk_actor_name, prop):
+            '''
+            Function to create in a automatic manner the contents of the different custom menus in
+            pyvistaqt
+            '''
+            def function():
+                self.plt.remove_actor(vtk_actor)
+                setattr(self, vtk_actor_name,
+                        self.plt.add_mesh(vtk_obj, show_scalar_bar=False, colormap="cool", scalars=prop))
+                vtk_button.GetRepresentation().SetState(True)
+
+            return function
 
         if self.vti:
             pos += 45.
@@ -65,10 +86,30 @@ class VtkPlot(object):
             self.plt.add_text('Graph', position=(pos, 65.), font_size=12)
             self.buttonGraph = self.plt.add_checkbox_button_widget(callback=self.plotGraph, position=(pos, 10.))
 
+            # Color By Menu
+            self.callbacks_graph = {}
+            graph_properties = self.graph.array_names
+            graph_menu = self.plt.main_menu.addMenu('Color Graph By')
+            for prop in graph_properties:
+                if 'normal' not in prop:
+                    self.callbacks_graph[prop] = function_builder(self.graph, self.graph_actor,
+                                                                  self.buttonGraph, 'graph_actor', prop)
+                    graph_menu.addAction(prop, self.callbacks_graph[prop])
+
         if self.net:
             pos += 170. if pos != 0 else 45.
             self.plt.add_text('Net', position=(pos, 65.), font_size=12)
             self.buttonNet = self.plt.add_checkbox_button_widget(callback=self.plotNet, position=(pos, 10.))
+
+            # Color By Menu
+            self.callbacks_net = {}
+            net_properties = self.net.array_names
+            net_menu = self.plt.main_menu.addMenu('Color Net By')
+            for prop in net_properties:
+                if 'normal' not in prop:
+                    self.callbacks_net[prop] = function_builder(self.net, self.net_actor,
+                                                                self.buttonNet, 'net_actor', prop)
+                    net_menu.addAction(prop, self.callbacks_net[prop])
 
         if self.peaks:
             self.peaks.set_active_vectors('smb_normal')
@@ -88,6 +129,7 @@ class VtkPlot(object):
         else:
             self.plt.remove_actor(self.vti_actor)
             self.buttonSliceVti.GetRepresentation().SetState(False)
+            self.vti_actor = None
 
     def toogleSlice(self, value):
         if value:
@@ -117,20 +159,23 @@ class VtkPlot(object):
             self.graph_actor = self.plt.add_mesh(self.graph, show_scalar_bar=False, colormap="cool")
         else:
             self.plt.remove_actor(self.graph_actor)
+            self.graph_actor = None
 
     def plotNet(self, value):
         if value:
             self.net_actor = self.plt.add_mesh(self.net, show_scalar_bar=False, colormap="cool")
         else:
             self.plt.remove_actor(self.net_actor)
+            self.net_actor = None
 
     def plotPeaks(self, value):
         mag = 0.02 * self.vti.dimensions[0]
         if value:
-            self.peaks_actor = self.plt.add_points(self.peaks, color="green", point_size=mag,
+            self.peaks_actor = self.plt.add_points(self.peaks, color="orange", point_size=mag,
                                                    render_points_as_spheres=True, show_scalar_bar=False)
         else:
             self.plt.remove_actor(self.peaks_actor)
+            self.peaks_actor = None
 
     def plotVectors(self, value):
         mag = 0.05 * self.vti.dimensions[0]
@@ -139,6 +184,7 @@ class VtkPlot(object):
                                                      mag=mag)
         else:
             self.plt.remove_actor(self.vectors_actor)
+            self.vectors_actor = None
 
     def initializePlot(self):
         self.plt.show()
