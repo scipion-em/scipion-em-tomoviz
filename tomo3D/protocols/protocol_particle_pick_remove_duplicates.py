@@ -31,11 +31,14 @@ Consensus picking protocol
 
 import numpy as np
 
+from pyworkflow import BETA
 import pyworkflow.protocol.params as params
 from pyworkflow.utils import getFiles, removeBaseExt
 
 from .protocol_particle_pick_consensus import (ProtTomoConsensusPicking,
                                                consensusWorker, getReadyTomos)
+
+import tomo.constants as const
 
 
 class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
@@ -45,6 +48,7 @@ class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
     """
 
     _label = 'remove duplicates'
+    _devStatus = BETA
     outputName = 'outputCoordinates'
     FN_PREFIX = 'purgedCoords_'
 
@@ -109,7 +113,7 @@ class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
         print("Removing duplicates for tomogram %d: '%s'"
               % (tomoId, tomoName))
 
-        coordArray = np.asarray([x.getPosition() for x in
+        coordArray = np.asarray([x.getPosition(const.SCIPION) for x in
                                  self.getMainInput().iterCoordinates(tomoId)],
                                  dtype=int)
         vIds = np.asarray([x.getGroupId() for x in
