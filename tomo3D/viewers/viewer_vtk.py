@@ -29,6 +29,7 @@ import pyvistaqt as pvqt
 import pyvista as pv
 from pyvista.utilities import generate_plane
 import vtk
+import numpy as np
 
 class VtkPlot(object):
     '''
@@ -89,7 +90,7 @@ class VtkPlot(object):
 
             # Color By Menu
             self.callbacks_graph = {}
-            graph_properties = self.graph.array_names
+            graph_properties = np.sort(self.graph.array_names)
             graph_menu = self.plt.main_menu.addMenu('Color Graph By')
             for prop in graph_properties:
                 if 'normal' not in prop:
@@ -104,7 +105,7 @@ class VtkPlot(object):
 
             # Color By Menu
             self.callbacks_net = {}
-            net_properties = self.net.array_names
+            net_properties = np.sort(self.net.array_names)
             net_menu = self.plt.main_menu.addMenu('Color Net By')
             for prop in net_properties:
                 if 'normal' not in prop:
