@@ -3,4 +3,5 @@ scipion-em >= 3.0.8
 scipion-em-tomo
 pyvista
 pyvistaqt
+pymeshfix
 PyQt5
