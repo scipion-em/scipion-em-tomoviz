@@ -32,6 +32,7 @@ from .viewer_triangulations import TriangulationPlot, guiThread
 from ..utils import delaunayTriangulation
 
 from tomo.utils import extractVesicles, initDictVesicles, normalFromMatrix
+import tomo.constants as const
 
 class Tomo3DTreeProvider(TreeProvider):
     """ Populate Tree from SetOfTomograms. """
@@ -109,7 +110,9 @@ class Tomo3DDialog(ToolbarListDialog):
                 if pwutils.removeBaseExt(subtomo.getVolName()) == tomoName:
                     normal = normalFromMatrix(subtomo.getTransform().getMatrix())
                     coord = subtomo.getCoordinate3D()
-                    coordSubtomo = [coord.getX(), coord.getY(), coord.getZ()]
+                    coordSubtomo = [coord.getX(const.SCIPION),
+                                    coord.getY(const.SCIPION),
+                                    coord.getZ(const.SCIPION)]
                     normals[0].append(normal)
                     extcoords.append(coordSubtomo)
 

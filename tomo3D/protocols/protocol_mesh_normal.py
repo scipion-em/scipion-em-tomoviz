@@ -28,12 +28,14 @@
 
 from os import path
 import numpy as np
+from pyworkflow import BETA
 from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, IntParam
 import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
 from tomo.objects import SubTomogram, Coordinate3D
 from tomo.protocols import ProtTomoBase
 from tomo.utils import normalFromMatrix
+import tomo.constants as const
 from ..utils import delaunayTriangulation, computeNormals
 
 
@@ -42,6 +44,7 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
     transformation matrix and filters them by different criteria related with the normal direction."""
 
     _label = 'filter by normal'
+    _devStatus = BETA
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
@@ -107,9 +110,9 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
             meshDict = {key: {'tomoName': [tomoName], 'points': [], 'normals': []}
                         for key, tomoName in zip(groupIdList, tomoNameList)}
 
-            for meshPoint in inMeshes:
+            for meshPoint in inMeshes.iterCoordinates():
                 if meshDict[meshPoint.getGroupId()]["tomoName"][0] == meshPoint.getVolumeName():
-                    meshDict[meshPoint.getGroupId()]["points"].append(meshPoint.getPosition())
+                    meshDict[meshPoint.getGroupId()]["points"].append(meshPoint.getPosition(const.SCIPION))
 
             for i in meshDict:
                 meshDict[i]["normals"] = self._getNormalVesicleList(np.asarray(meshDict[i]["points"]))
@@ -219,7 +222,9 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         else:
             normSubtomo = normalFromMatrix(item.getMatrix())
             coord = item
-        coors = np.asarray([coord.getX(), coord.getY(), coord.getZ()])
+        coors = np.asarray([coord.getX(const.SCIPION),
+                            coord.getY(const.SCIPION),
+                            coord.getZ(const.SCIPION)])
         points, normals = zip(*normalsList)
         points = np.asarray(points)
         idx = np.argmin(np.sum((points - coors) ** 2, axis=1))
