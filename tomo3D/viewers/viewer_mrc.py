@@ -31,6 +31,7 @@ from pyvista.utilities import generate_plane
 import pymeshfix as pm
 import vtk
 import numpy as np
+import matplotlib
 
 from pwem.emlib.image import ImageHandler
 
@@ -182,8 +183,10 @@ class MrcPlot(object):
 
     def plotMasks(self, value):
         if value:
-            self.mask_actors = [self.plt.add_mesh(mask, show_scalar_bar=False, color="white", smooth_shading=True)
-                                for mask in self.pv_masks]
+            cmap = matplotlib.cm.get_cmap('Set3')
+            cmap_ids = np.linspace(0, 1, len(self.pv_masks))
+            self.mask_actors = [self.plt.add_mesh(mask, show_scalar_bar=False, color=cmap(cmap_id), smooth_shading=True)
+                                for mask, cmap_id in zip(self.pv_masks, cmap_ids)]
         else:
             for actor in self.mask_actors:
                 self.plt.remove_actor(actor)
