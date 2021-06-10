@@ -27,7 +27,7 @@
 
 import pwem
 
-_version_ = 3.0.0
+__version__ = 3.0.0
 _logo = "icon.png"
 _references = ['you2019']
 
