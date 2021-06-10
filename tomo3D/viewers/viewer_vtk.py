@@ -189,4 +189,4 @@ class VtkPlot(object):
             self.vectors_actor = None
 
     def initializePlot(self):
-        self.plt.show()
+        self.plt.app.exec_()

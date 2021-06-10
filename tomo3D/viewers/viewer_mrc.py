@@ -190,4 +190,5 @@ class MrcPlot(object):
             self.graph_actor = []
 
     def initializePlot(self):
-        self.plt.show()
+        self.plt.app.exec_()
+
