@@ -6,3 +6,6 @@
 
 # IDE files
 .idea
+
+# VSCODE files
+.vscode

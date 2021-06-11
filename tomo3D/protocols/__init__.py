@@ -27,3 +27,4 @@
 
 from .protocol_particle_pick_consensus import ProtTomoConsensusPicking
 from .protocol_particle_pick_remove_duplicates import ProtTomoPickingRemoveDuplicates
+from .protocol_mesh_normal import XmippProtFilterbyNormal

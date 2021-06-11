@@ -28,6 +28,7 @@
 import pyvista as pv
 import numpy as np
 from scipy.spatial.distance import pdist
+from multiprocessing import Process
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QDockWidget
 from pyvistaqt.plotting import QtInteractor
@@ -52,10 +53,11 @@ class TriangulationPlot(object):
     '''
 
 
-    def __init__(self, meshes, clouds=None, extNormals_List=None):
+    def __init__(self, meshes, clouds=None, extNormals_List=None, extNormals_coords=None):
         self.clouds = clouds
         self.meshes = meshes
         self.extNormals_List = extNormals_List
+        self.extNormals_coords = extNormals_coords
         self.initialize_PyQt()
         self.actor_meshes = []
         self.actor_normals = []
@@ -128,10 +130,15 @@ class TriangulationPlot(object):
                 normals = pv.pyvista_ndarray(normals)
                 vecLength = np.amax(pdist(self.meshes[idn].points))
                 normals = vecLength * (normals / np.linalg.norm(normals, axis=1)[:, np.newaxis])
-                areZero = np.where((self.meshes[idn].point_normals == (0, 0, 0)).all(axis=1))
-                normals[areZero] = np.array((0, 0, 0))
-                self.actor_extNormals.append(self.p.add_arrows(self.meshes[idn].points, normals,
-                                             mag=0.1, color='red'))
+                if self.extNormals_coords is None:
+                    areZero = np.where((self.meshes[idn].point_normals == (0, 0, 0)).all(axis=1))
+                    normals[areZero] = np.array((0, 0, 0))
+                    self.actor_extNormals.append(self.p.add_arrows(self.meshes[idn].points, normals,
+                                                                   mag=0.1, color='red'))
+                else:
+                    extNormals_coords = pv.pyvista_ndarray(self.extNormals_coords)
+                    self.actor_extNormals.append(self.p.add_arrows(extNormals_coords, normals,
+                                                                   mag=0.1, color='red'))
         else:
             for actor in self.actor_extNormals:
                 self.p.remove_actor(actor)
@@ -161,3 +168,41 @@ class TriangulationPlot(object):
 
     def initializePlot(self):
         self.app.exec_()
+        
+# The following functions are used to create automatically a "gui thread" to avoid the 'exec_' loop 
+# from freezing the main thread
+
+def guiThread(classObj, methodName, *args, **kwargs):
+    '''
+    Create a new process to prevent the exec_ loop of the GUI from blocking the main thread. In order to work,
+    the GUI classes must be instantiated withing the process.
+    '''
+    proc = Process(target=instantiateClass, args=(classObj, methodName, *args,), kwargs=kwargs)
+    proc.start()
+    
+def instantiateClass(classObj, methodName, *args, **kwargs):
+    '''
+    Create an instance of any class and call a visualization method (or any other method).
+        - classObj (class): Class to be instantiated
+        - methodName (string): Method from the class to be called after the instantiation
+        - *args (list): extra argument needed to call the class method
+        - **kwargs (dict): arguments to be passed to the contructor of the class
+    '''
+    try:
+        instance = classObj(**kwargs)
+        runMethod(instance, methodName, *args)
+    except:
+        print('Cannot create instance of class')
+    
+def runMethod(instance, methodName, *args):
+    '''
+    Execute a method from an instantiated class:
+        - instance (obj): object instantiated from a given class
+        - methodName (string): method belonging to instance to be called
+        - *args (list): extra arguments needed by the method
+    '''
+    try:
+        method = getattr(instance, methodName)
+        method(*args)
+    except AttributeError:
+        print(methodName + ' is not a member the class')

@@ -24,14 +24,15 @@
 # *
 # **************************************************************************
 
-from multiprocessing import Process
-
 from pyworkflow import utils as pwutils
 from pyworkflow.gui.dialog import ToolbarListDialog
 from pyworkflow.gui.tree import TreeProvider
 
-from .viewer_triangulations import TriangulationPlot
+from .viewer_triangulations import TriangulationPlot, guiThread
 from ..utils import delaunayTriangulation
+
+from tomo.utils import extractVesicles, initDictVesicles, normalFromMatrix
+import tomo.constants as const
 
 class Tomo3DTreeProvider(TreeProvider):
     """ Populate Tree from SetOfTomograms. """
@@ -44,7 +45,8 @@ class Tomo3DTreeProvider(TreeProvider):
         return [('Tomogram', 300)]
 
     def getObjectInfo(self, tomo):
-        tomogramName = pwutils.removeBaseExt(tomo.getFileName())
+        # tomogramName = pwutils.removeBaseExt(tomo.getFileName())
+        tomogramName = pwutils.removeBaseExt(tomo.get())
 
         return {'key': tomogramName, 'parent': None,
                 'text': tomogramName,
@@ -74,8 +76,10 @@ class Tomo3DDialog(ToolbarListDialog):
     a pyvista viewer subprocess from a list of Tomograms.
     """
 
-    def __init__(self, parent, vesicles_dict, **kwargs):
-        self.vesicles_dict = vesicles_dict
+    def __init__(self, parent, coordinates, extnormals, **kwargs):
+        self.dictVesicles, _ = initDictVesicles(coordinates)
+        self.coordinates = coordinates
+        self.extnormals = extnormals
         self.provider = kwargs.get("provider", None)
         ToolbarListDialog.__init__(self, parent,
                                    "Tomogram List",
@@ -85,15 +89,36 @@ class Tomo3DDialog(ToolbarListDialog):
 
     def doubleClickOnTomogram(self, e=None):
         self.tomo = e
-        self.proc = Process(target=createViewer, args=(self.tomo, self.vesicles_dict))
-        self.proc.start()
+        # tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        tomoName = pwutils.removeBaseExt(self.tomo.get())
+        self.dictVesicles = extractVesicles(self.coordinates, self.dictVesicles, tomoName)
+        self.createViewer()
 
-def createViewer(tomo, vesicles_dict):
-    tomoName = pwutils.removeBaseExt(tomo.getFileName())
-    normals = vesicles_dict[tomoName]['normals']
-    vesicles = vesicles_dict[tomoName]['vesicles']
-    shells = []
-    for vesicle in vesicles:
-        shells.append(delaunayTriangulation(vesicle))
-    plt = TriangulationPlot(shells, clouds=vesicles, extNormals_List=normals)
-    plt.initializePlot()
+    def createViewer(self):
+        # tomoName = pwutils.removeBaseExt(self.tomo.getFileName())
+        tomoName = pwutils.removeBaseExt(self.tomo.get())
+        vesicles = self.dictVesicles[tomoName]['vesicles']
+        shells = []
+        for vesicle in vesicles:
+            shells.append(delaunayTriangulation(vesicle))
+
+        if self.extnormals is not None:
+            normals = []
+            extcoords = []
+            normals.append([])
+            for subtomo in self.extnormals:  # separate normals by tomoName/volId
+                if pwutils.removeBaseExt(subtomo.getVolName()) == tomoName:
+                    normal = normalFromMatrix(subtomo.getTransform().getMatrix())
+                    coord = subtomo.getCoordinate3D()
+                    coordSubtomo = [coord.getX(const.SCIPION),
+                                    coord.getY(const.SCIPION),
+                                    coord.getZ(const.SCIPION)]
+                    normals[0].append(normal)
+                    extcoords.append(coordSubtomo)
+
+        else:
+            normals = self.dictVesicles[tomoName]['normals']
+            extcoords = None
+
+        classArgs = {'meshes': shells, 'clouds': vesicles, 'extNormals_List': normals, 'extNormals_coords': extcoords}
+        guiThread(TriangulationPlot, 'initializePlot', **classArgs)

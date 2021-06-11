@@ -24,15 +24,17 @@
 # *
 # **************************************************************************
 
-import pyworkflow.viewer as pwviewer
-import pyworkflow.utils as pwutils
 
+import pyworkflow.viewer as pwviewer
+from pyworkflow.object import String
+
+from pwem.protocols import EMProtocol
 import pwem.viewers.views as vi
 from .views_tkinter_tree import Tomo3DTreeProvider
 from .views_tkinter_tree import Tomo3DDialog
 
-from tomo.utils import extractVesicles
 import tomo.objects
+from ..protocols import XmippProtFilterbyNormal
 
 
 class Tomo3DDataViewer(pwviewer.Viewer):
@@ -41,7 +43,8 @@ class Tomo3DDataViewer(pwviewer.Viewer):
     """
     _environments = [pwviewer.DESKTOP_TKINTER]
     _targets = [
-        tomo.objects.SetOfCoordinates3D
+        tomo.objects.SetOfCoordinates3D,
+        XmippProtFilterbyNormal
     ]
 
     def __init__(self, **kwargs):
@@ -58,14 +61,21 @@ class Tomo3DDataViewer(pwviewer.Viewer):
 
         if issubclass(cls, tomo.objects.SetOfCoordinates3D):
             outputCoords = obj
+        elif issubclass(cls, EMProtocol):
+            outputCoords = obj.inputMeshes.get()
 
-            tomos = outputCoords.getPrecedents()
-            tomoNames = {pwutils.removeBaseExt(coord.getVolume().getFileName()) for coord in outputCoords.iterCoordinates()}
-            tomoList = [tomo.clone() for tomo in tomos.iterItems() if 
-                        pwutils.removeBaseExt(tomo.getFileName()) in tomoNames]
-            tomoProvider = Tomo3DTreeProvider(tomoList)
+        tomos = outputCoords.getPrecedents()
 
-            vesicles_dict = extractVesicles(outputCoords)
-            Tomo3DDialog(self._tkRoot, vesicles_dict, provider=tomoProvider)
+        volIds = outputCoords.aggregate(["MAX"], "_volId", ["_volId"])
+        volIds = [d['_volId'] for d in volIds]
+
+        # tomoList = [tomos[objId].clone() for objId in volIds]
+        tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
+        tomoProvider = Tomo3DTreeProvider(tomoList)
+
+        if issubclass(cls, tomo.objects.SetOfCoordinates3D):
+            Tomo3DDialog(self._tkRoot, outputCoords, None, provider=tomoProvider)
+        elif issubclass(cls, EMProtocol):
+            Tomo3DDialog(self._tkRoot, outputCoords, obj.outputset, provider=tomoProvider)
 
         return views

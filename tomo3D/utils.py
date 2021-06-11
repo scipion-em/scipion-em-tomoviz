@@ -25,12 +25,11 @@
 # *
 # **************************************************************************
 
-import os
+import sys
 import pyvista as pv
 import numpy as np
 from scipy.spatial import cKDTree
 
-import pyworkflow.utils as pwutils
 
 def rotation_matrix_from_vectors(vec1, vec2):
     # a, b = (vec1 / np.linalg.norm(vec1)).reshape(3), (vec2 / np.linalg.norm(vec2)).reshape(3)
@@ -47,6 +46,13 @@ def rotation_matrix_from_vectors(vec1, vec2):
         return tr
     else:
         return np.eye(4)
+
+def inverse_Transformation(transformation):
+    translation = np.eye(4)
+    rotation = np.eye(4)
+    translation[0:-1, -1] = -transformation[0:-1, -1]
+    rotation[:3, :3] = transformation[:3, :3]
+    return np.linalg.inv(rotation).dot(translation)
 
 def delaunayTriangulation(cloud, adjustCloud=True):
     cloud_pv = pv.PolyData(cloud)
@@ -97,11 +103,9 @@ def computeNormals(triangulation, associateCoords=False):
         points = np.delete(points, areZero, axis=0)
         ngNormals = np.asarray([np.argmin(np.linalg.norm(points - point, axis=1))
                                 for point in redundant])
-        print(areZero, ngNormals)
         normals[areZero] = normals[ngNormals]
 
     if associateCoords:
         return [(np.asarray(point), np.asarray(normal)) for point, normal in zip(points, normals)]
     else:
         return np.asarray(normals)
-
