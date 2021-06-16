@@ -25,31 +25,40 @@
 # *
 # **************************************************************************
 
+
 import pyvistaqt as pvqt
 import pyvista as pv
 from pyvista.utilities import generate_plane
 import pymeshfix as pm
 import vtk
+
 import numpy as np
 import matplotlib
 
+from scipy.ndimage import zoom
+
+from skimage import measure
+from skimage.morphology import binary_dilation, binary_erosion, ball
+
 from pwem.emlib.image import ImageHandler
+
 
 class MrcPlot(object):
     '''
     Class to visualize MRC files
     Input paramters:
-         - tomo_mrc (Optional): File containing a Volume (in MRC format)
-         - mask_mrc (Optional): File containing a Mask (in MRC format)
+         - tomo_mrc (Path (Str) - Optional): File containing a Volume (in MRC format)
+         - mask_mrc (Path (Str) - Optional): File containing a Mask (in MRC format)
+         - binning (Float - Optional):  Binning factor to be applied to tomo_mrc and mask_mrc (Very useful to save time)
     Usage:
          import MRCPlot
-         plt = MRCPlot(vti_file=path_vti, graph_file=path_graph, net_file=path_net, peaks_file=path_peaks)
+         plt = MRCPlot(tomo_mrc=tomo_mrc, mask_mrc=mask_mrc, binning=2)
          plt.initializePlot()
     '''
 
-    def __init__(self, tomo_mrc=None, mask_mrc=None):
-        self.tomo = self.readMRC(tomo_mrc) if tomo_mrc is not None else None
-        self.mask = self.readMRC(mask_mrc) if mask_mrc is not None else None
+    def __init__(self, tomo_mrc=None, mask_mrc=None, binning=1):
+        self.tomo = self.readMRC(tomo_mrc, binning=binning) if tomo_mrc is not None else None
+        self.mask = self.readMRC(mask_mrc, binning=binning) if mask_mrc is not None else None
 
         # Get Pyvista Objects
         if isinstance(self.tomo, np.ndarray):
@@ -79,8 +88,11 @@ class MrcPlot(object):
             self.plt.add_text('Vesicles', position=(pos, 65.), font_size=12)
             self.buttonGraph = self.plt.add_checkbox_button_widget(callback=self.plotMasks, position=(pos, 10.))
 
-    def readMRC(self, file):
-        return np.squeeze(ImageHandler().read(file).getData())
+    def readMRC(self, file, binning=1):
+        image = ImageHandler().read(file + ':mrc')
+        data = np.squeeze(image.getData())
+        data = zoom(data, 1 / (2 ** binning), order=0, prefilter=False)
+        return data
 
     def gridFromMRC(self, data):
         '''Function to convert an MRC file into an Structure Grid in VTK'''
@@ -110,29 +122,18 @@ class MrcPlot(object):
         # axis convention
         data = np.swapaxes(np.swapaxes(data, 0, 2), 1, 0)
 
-        # Get Only mesh corresponding to a given label
-        data = data * (data == label).astype(int)
+        # Get Only mesh corresponding to a given label (smooth the result to fill holes in the mask)
+        data = data == label
+        data = binary_erosion(binary_dilation(data, selem=ball(4)), selem=ball(1))
 
-        # Create a Grid from the data
-        x = np.arange(0, data.shape[0])
-        y = np.arange(0, data.shape[1])
-        z = np.arange(0, data.shape[2])
-        x, y, z = np.meshgrid(x, y, z)
-
-        # Copy Data to Poly Data VTK object (Pyvista)
-        grid = pv.StructuredGrid(x, y, z)
-
-        # Set the cell values. Previous reordering of the axis was needed to flatten properly the array
-        grid.point_arrays["values"] = data.flatten(order="K").astype(int)
-
-        # Triangulate coordinates
-        grid = grid.contour()
-        grid = pv.PolyData(grid.points).delaunay_3d(alpha=1).triangulate().extract_geometry()
+        # Triangulate coordinates using marching cubes algorithm
+        grid = self.marchingCubes(data)
 
         # Fix the mesh
         mfix = pm._meshfix.PyTMesh(False)
         mfix.load_array(grid.points, grid.faces.reshape((-1, 4))[:, 1:])
-        mfix.fill_small_boundaries(nbe=100, refine=True)
+        mfix.join_closest_components()
+        mfix.fill_small_boundaries(refine=True)
         vert, faces = mfix.return_arrays()
 
         # Reconstruct fixed mesh
@@ -141,11 +142,31 @@ class MrcPlot(object):
         triangles[:, 0] = 3
         grid = pv.PolyData(vert, triangles.astype(int))
 
-        # Final fixing using pyvista and smoothing
-        grid = grid.fill_holes(10)
-        grid = grid.smooth(n_iter=500).clean()
+        # Final smoothing using pyvista
+        grid = grid.smooth(n_iter=1000).clean()
 
         return grid
+
+    def marchingCubes(self, volume):
+        vertices, faces = measure.marching_cubes(volume, spacing=(1, 1, 1))[:2]
+        faces = np.column_stack((3 * np.ones((len(faces), 1), dtype=np.int), faces)).flatten()
+        grid = pv.PolyData(vertices.astype(int), faces)
+        return grid
+
+    def downsamplingPC(self, coords, voxel_size):
+        non_empty_voxel_keys, inverse, nb_pts_per_voxel = np.unique(((coords - np.min(coords, axis=0))
+                                                                     // voxel_size).astype(int), axis=0,
+                                                                    return_inverse=True,
+                                                                    return_counts=True)
+        idx_pts_vox_sorted = np.argsort(inverse)
+        voxel_grid = {}
+        grid_barycenter, grid_candidate_center = [], []
+        last_seen = 0
+        for idx, vox in enumerate(non_empty_voxel_keys):
+            voxel_grid[tuple(vox)] = coords[idx_pts_vox_sorted[last_seen:last_seen + nb_pts_per_voxel[idx]]]
+            grid_barycenter.append(np.mean(voxel_grid[tuple(vox)], axis=0))
+            last_seen += nb_pts_per_voxel[idx]
+        return np.asarray(grid_barycenter)
 
     def plotTomo(self, value):
         if value:
@@ -155,6 +176,7 @@ class MrcPlot(object):
             self.plt.reset_camera()
         else:
             self.plt.remove_actor(self.tomo_actor)
+            self.plt.clear_plane_widgets()
             self.buttonSliceTomo.GetRepresentation().SetState(False)
             self.tomo_actor = None
 
