@@ -4,4 +4,5 @@ scipion-em-tomo
 pyvista
 pyvistaqt
 pymeshfix
+scikit-image
 PyQt5

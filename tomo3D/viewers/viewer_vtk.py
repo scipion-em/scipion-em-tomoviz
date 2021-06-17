@@ -35,29 +35,32 @@ class VtkPlot(object):
     '''
     Class to visualize VTK files
     Input paramters:
-         - vti_file (Optional): File containing a Volume (Volume VTK Object)
-         - graph_file (Optional): File containing a Graph (PolyData VTK Object)
-         - net_file (Optional): File containing a Net (PolyData VTK Object)
-         - peaks_file (Optional): File containing Peaks - Coordinates (PolyData VTK Object)
+         - vti_file (Path (Str) - Optional): File containing a Volume (Volume VTK Object)
+         - graph_file (Path (Str) - Optional): File containing a Graph (PolyData VTK Object)
+         - net_file (Path (Str) - Optional): File containing a Net (PolyData VTK Object)
+         - peaks_file (Path (Str) - Optional): File containing Peaks - Coordinates (PolyData VTK Object)
+         - surf_file (Path (Str) - Optional): File containing a Surface (PolyData VTK Object)
     Usage:
          import VtkPlot
          plt = VtkPlot(vti_file=path_vti, graph_file=path_graph, net_file=path_net, peaks_file=path_peaks)
          plt.initializePlot()
     '''
 
-    def __init__(self, vti_file=None, graph_file=None, net_file=None, peaks_file=None):
+    def __init__(self, vti_file=None, graph_file=None, net_file=None, peaks_file=None, surf_file=None):
         self.vti = pv.read(vti_file) if vti_file is not None else None
         self.graph = pv.read(graph_file) if graph_file is not None else None
         self.net = pv.read(net_file) if net_file is not None else None
         self.peaks = pv.read(peaks_file) if peaks_file is not None else None
+        self.surf = pv.read(surf_file) if surf_file is not None else None
 
         self.vti_actor = None
         self.graph_actor = None
         self.net_actor = None
         self.peaks_actor = None
         self.vectors_actor = None
+        self.surf_actor = None
 
-        self.plt = pvqt.BackgroundPlotter()
+        self.plt = pvqt.BackgroundPlotter(window_size=(1200, 800))
         self.plt.main_menu.clear()
 
         pos = 0.
@@ -122,6 +125,11 @@ class VtkPlot(object):
             self.buttonVectors = self.plt.add_checkbox_button_widget(callback=self.plotVectors, position=(pos, 10.))
             self.plt.add_text('Directions', position=(pos, 65.), font_size=12)
 
+        if self.surf:
+            pos += 170. if pos != 0 else 45.
+            self.plt.add_text('Surface', position=(pos, 65.), font_size=12)
+            self.buttonPeaks = self.plt.add_checkbox_button_widget(callback=self.plotSurface, position=(pos, 10.))
+
     def plotVti(self, value):
         if value:
             self.vti_actor = self.plt.add_mesh_slice(self.vti, normal='z', cmap="bone", show_scalar_bar=False,
@@ -130,6 +138,7 @@ class VtkPlot(object):
             self.plt.reset_camera()
         else:
             self.plt.remove_actor(self.vti_actor)
+            self.plt.clear_plane_widgets()
             self.buttonSliceVti.GetRepresentation().SetState(False)
             self.vti_actor = None
 
@@ -187,6 +196,13 @@ class VtkPlot(object):
         else:
             self.plt.remove_actor(self.vectors_actor)
             self.vectors_actor = None
+
+    def plotSurface(self, value):
+        if value:
+            self.surf_actor = self.plt.add_mesh(self.surf, opacity=0.6, color="white", show_scalar_bar=False)
+        else:
+            self.plt.remove_actor(self.surf_actor)
+            self.surf_actor = None
 
     def initializePlot(self):
         self.plt.app.exec_()
