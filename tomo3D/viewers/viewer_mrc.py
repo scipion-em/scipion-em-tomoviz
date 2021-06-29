@@ -28,14 +28,13 @@
 
 import pyvistaqt as pvqt
 import pyvista as pv
-from pyvista.utilities import generate_plane
 import pymeshfix as pm
-import vtk
 
 import numpy as np
 import matplotlib
 
-from scipy.ndimage import zoom
+from scipy.ndimage import zoom, gaussian_filter
+# from scipy.spatial.distance import pdist
 
 from skimage import measure
 from skimage.morphology import binary_dilation, binary_erosion, ball
@@ -49,26 +48,47 @@ class MrcPlot(object):
     Input paramters:
          - tomo_mrc (Path (Str) - Optional): File containing a Volume (in MRC format)
          - mask_mrc (Path (Str) - Optional): File containing a Mask (in MRC format)
+         - points (Path (Str) - Optional): File containing a SetOfCoordinates3D (in TEXT format)
+         - normals (Path (Str) - Optional): File containing a Set of Normals (in TEXT format)
          - binning (Float - Optional):  Binning factor to be applied to tomo_mrc and mask_mrc (Very useful to save time)
+         - sigma (Float - Optional):  Gaussian Filter width
+         - triangulation (Bool - Optional): Tells if the representation of the Tomomgra is Voxel based on Triangle based
     Usage:
          import MRCPlot
          plt = MRCPlot(tomo_mrc=tomo_mrc, mask_mrc=mask_mrc, binning=2)
          plt.initializePlot()
     '''
 
-    def __init__(self, tomo_mrc=None, mask_mrc=None, binning=1):
-        self.tomo = self.readMRC(tomo_mrc, binning=binning) if tomo_mrc is not None else None
+    def __init__(self, tomo_mrc=None, mask_mrc=None, points=None, normals=None,
+                 binning=1, sigma=1., triangulation=False):
+        self.tomo = self.readMRC(tomo_mrc, order=5, binning=binning) if tomo_mrc is not None else None
         self.mask = self.readMRC(mask_mrc, binning=binning) if mask_mrc is not None else None
+        self.points = np.loadtxt(points, delimiter=' ') if points is not None else None
+        self.normals = np.loadtxt(normals, delimiter=' ') if normals is not None else None
 
         # Get Pyvista Objects
         if isinstance(self.tomo, np.ndarray):
-            self.pv_tomo = self.gridFromMRC(self.tomo)
+            self.pv_tomo_slice = self.gridFromMRC(self.tomo)
+            self.pv_tomo, self.opacities = self.isovolumes(self.tomo, triangulation=triangulation, sigma=sigma)
         if isinstance(self.mask, np.ndarray):
             labels = np.unique(self.mask)[1:]
             self.pv_masks = [self.surfaceFromMRC(self.mask, label=label) for label in labels]
+        if isinstance(self.points, np.ndarray):
+            self.points = np.column_stack([self.points[:, 1], self.points[:, 0], self.points[:, 2]])
+            self.points /= 2 ** binning  # Binning Scaling
+            self.pv_points = pv.PolyData(self.points)
+        if isinstance(self.normals, np.ndarray):
+            self.normals = np.column_stack([self.normals[:, 1], self.normals[:, 0], self.normals[:, 2]])
+            # vecLength = np.amax(pdist(self.pv_points.points))
+            self.normals /= np.linalg.norm(self.normals, axis=1)[:, np.newaxis]
+            # self.normals *= vecLength
+            self.pv_normals = pv.pyvista_ndarray(self.normals)
 
-        self.tomo_actor = None
+        self.tomo_actor = []
+        self.tomo_slice_actor = None
         self.mask_actors = []
+        self.points_actor = None
+        self.normals_actor = None
 
         self.plt = pvqt.BackgroundPlotter()
         self.plt.main_menu.clear()
@@ -88,18 +108,43 @@ class MrcPlot(object):
             self.plt.add_text('Vesicles', position=(pos, 65.), font_size=12)
             self.buttonGraph = self.plt.add_checkbox_button_widget(callback=self.plotMasks, position=(pos, 10.))
 
-    def readMRC(self, file, binning=1):
+        if isinstance(self.points, np.ndarray):
+            pos += 170. if pos != 0 else 45.
+            self.plt.add_text('Coords', position=(pos, 65.), font_size=12)
+            self.buttonPoints = self.plt.add_checkbox_button_widget(callback=self.plotPoints, position=(pos, 10.))
+
+            # Picking Callbacks
+            def removeSelection(selection):
+                self.pv_points.remove_cells(selection.active_scalars, inplace=True)
+                if self.normals is not None:
+                    self.pv_normals = np.delete(self.pv_normals, selection.active_scalars, 0)
+                    self.plt.remove_actor(self.normals_actor)
+                    self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
+                                                             mag=10, color='red', reset_camera=False)
+
+            def enableRemoveSelection():
+                self.plt.enable_cell_picking(mesh=self.pv_points,
+                                             callback=removeSelection,
+                                             font_size=12, opacity=0)
+
+            # Picking Controls
+            self.plt.main_menu.addAction('Point Removal', enableRemoveSelection)
+
+        if isinstance(self.normals, np.ndarray):
+            pos += 170. if pos != 0 else 45.
+            self.plt.add_text('Directions', position=(pos, 65.), font_size=12)
+            self.buttonNormals = self.plt.add_checkbox_button_widget(callback=self.plotNormals, position=(pos, 10.))
+
+
+    def readMRC(self, file, binning=1, order=0, swapaxes=True):
         image = ImageHandler().read(file + ':mrc')
         data = np.squeeze(image.getData())
-        data = zoom(data, 1 / (2 ** binning), order=0, prefilter=False)
+        data = zoom(data, 1 / (2 ** binning), order=order, prefilter=False)
+        data = np.swapaxes(np.swapaxes(data, 0, 2), 1, 0) if swapaxes else data
         return data
 
     def gridFromMRC(self, data):
         '''Function to convert an MRC file into an Structure Grid in VTK'''
-
-        # Reorder Axis (This is needed as Numpy doesn't follow the Z,Y,X convention from Scipion but the X,Y,Z
-        # axis convention
-        data = np.swapaxes(np.swapaxes(data, 0, 2), 1, 0)
 
         # Create a Grid from the data
         x = np.arange(0, data.shape[0] + 1)
@@ -117,10 +162,6 @@ class MrcPlot(object):
 
     def surfaceFromMRC(self, data, label=1):
         '''Function to convert an MRC file into an Structure Surface in VTK'''
-
-        # Reorder Axis (This is needed as Numpy doesn't follow the Z,Y,X convention from Scipion but the X,Y,Z
-        # axis convention
-        data = np.swapaxes(np.swapaxes(data, 0, 2), 1, 0)
 
         # Get Only mesh corresponding to a given label (smooth the result to fill holes in the mask)
         data = data == label
@@ -147,11 +188,29 @@ class MrcPlot(object):
 
         return grid
 
-    def marchingCubes(self, volume):
-        vertices, faces = measure.marching_cubes(volume, spacing=(1, 1, 1))[:2]
+    def marchingCubes(self, volume, level=None, triangulation=True):
+        vertices, faces = measure.marching_cubes(volume, spacing=(1, 1, 1), level=level, allow_degenerate=False)[:2]
         faces = np.column_stack((3 * np.ones((len(faces), 1), dtype=np.int), faces)).flatten()
-        grid = pv.PolyData(vertices.astype(int), faces)
+        grid = pv.PolyData(vertices.astype(int), faces) if triangulation else pv.PolyData(vertices.astype(int))
         return grid
+
+    def histogram(self, volume):
+        hist, edges = np.histogram(volume, bins=100)
+        hist = hist / np.sum(hist)
+        bin_centers = np.mean(np.vstack([edges[0:-1], edges[1:]]), axis=0)
+        return hist, bin_centers
+
+    def contours(self, hist, bin_centers):
+        opacities = 1 - hist[np.where((hist > np.std(hist)) * (hist < np.amax(hist)))]
+        contour_values = bin_centers[np.where((hist > np.std(hist)) * (hist < np.amax(hist)))]
+        return contour_values, opacities
+
+    def isovolumes(self, volume, range=0.01, sigma=None, triangulation=True):
+        volume = volume if sigma is None else gaussian_filter(volume, sigma=sigma)
+        hist, bin_centers = self.histogram(volume)
+        contour_values, opacities = self.contours(hist, bin_centers)
+        opacities = (range / (np.amax(opacities) - np.amin(opacities))) * (opacities - np.amin(opacities))
+        return [self.marchingCubes(volume, level, triangulation) for level in contour_values], opacities
 
     def downsamplingPC(self, coords, voxel_size):
         non_empty_voxel_keys, inverse, nb_pts_per_voxel = np.unique(((coords - np.min(coords, axis=0))
@@ -170,38 +229,25 @@ class MrcPlot(object):
 
     def plotTomo(self, value):
         if value:
-            self.tomo_actor = self.plt.add_mesh_slice(self.pv_tomo, normal='z', cmap="bone", show_scalar_bar=False,
-                                                      outline_translation=False, origin_translation=False)
-            self.buttonSliceTomo.GetRepresentation().SetState(True)
+            cmap = matplotlib.cm.get_cmap('bone')  # Bone also looks nice
+            cmap_ids = np.linspace(0, 1, len(self.pv_tomo))
+            self.tomo_actor = [self.plt.add_mesh(actor, show_scalar_bar=False, opacity=op, color=cmap(cid),
+                                                 render_points_as_spheres=True)
+                               for actor, op, cid in zip(self.pv_tomo, self.opacities, cmap_ids)]
             self.plt.reset_camera()
         else:
-            self.plt.remove_actor(self.tomo_actor)
-            self.plt.clear_plane_widgets()
-            self.buttonSliceTomo.GetRepresentation().SetState(False)
-            self.tomo_actor = None
+            for actor in self.tomo_actor:
+                self.plt.remove_actor(actor)
+            self.tomo_actor = []
 
     def toogleSlice(self, value):
         if value:
-            if self.buttonTomo.GetRepresentation().GetState():
-                plane_sliced_mesh = self.plt.plane_sliced_meshes[0]
-                alg = vtk.vtkCutter()
-                alg.SetInputDataObject(self.pv_tomo)
-
-                def callback(normal, origin):
-                    plane = generate_plane(normal, origin)
-                    alg.SetCutFunction(plane)
-                    alg.Update()
-                    plane_sliced_mesh.shallow_copy(alg.GetOutput())
-
-                self.plt.add_plane_widget(callback=callback, bounds=self.pv_tomo.bounds,
-                                          factor=1.25, normal='z',
-                                          origin_translation=False,
-                                          outline_translation=False,
-                                          origin=self.pv_tomo.center)
-            else:
-                self.buttonSliceTomo.GetRepresentation().SetState(False)
+            self.tomo_slice_actor = self.plt.add_mesh_slice(self.pv_tomo_slice, normal='z', cmap="gray", show_scalar_bar=False,
+                                                            outline_translation=False, origin_translation=False)
         else:
+            self.plt.remove_actor(self.tomo_slice_actor)
             self.plt.clear_plane_widgets()
+            self.tomo_slice_actor = None
 
     def plotMasks(self, value):
         if value:
@@ -213,6 +259,22 @@ class MrcPlot(object):
             for actor in self.mask_actors:
                 self.plt.remove_actor(actor)
             self.graph_actor = []
+
+    def plotPoints(self, value):
+        if value:
+            self.points_actor = self.plt.add_mesh(self.pv_points, show_scalar_bar=False, color='orange',
+                                                  render_points_as_spheres=True, reset_camera=False)
+        else:
+            self.plt.remove_actor(self.points_actor)
+            self.points_actor = None
+
+    def plotNormals(self, value):
+        if value:
+            self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
+                                                     mag=10, color='red', reset_camera=False)
+        else:
+            self.plt.remove_actor(self.normals_actor)
+            self.normals_actor = None
 
     def initializePlot(self):
         self.plt.app.exec_()
