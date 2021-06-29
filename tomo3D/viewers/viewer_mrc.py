@@ -60,7 +60,14 @@ class MrcPlot(object):
     '''
 
     def __init__(self, tomo_mrc=None, mask_mrc=None, points=None, normals=None,
-                 binning=1, sigma=1., triangulation=False):
+                 binning=None, sigma=1., triangulation=False):
+        if binning is None:
+            if tomo_mrc is not None:
+                binning = self.getBinning(tomo_mrc)
+            elif mask_mrc is not None:
+                binning = self.getBinning(mask_mrc)
+            else:
+                binning = 0
         self.tomo = self.readMRC(tomo_mrc, order=5, binning=binning) if tomo_mrc is not None else None
         self.mask = self.readMRC(mask_mrc, binning=binning) if mask_mrc is not None else None
         self.points = np.loadtxt(points, delimiter=' ') if points is not None else None
@@ -135,6 +142,9 @@ class MrcPlot(object):
             self.plt.add_text('Directions', position=(pos, 65.), font_size=12)
             self.buttonNormals = self.plt.add_checkbox_button_widget(callback=self.plotNormals, position=(pos, 10.))
 
+    def getBinning(self, file):
+        dim = ImageHandler().read(file + ':mrc').getDimensions()
+        return int(np.floor(max(dim) / 400))
 
     def readMRC(self, file, binning=1, order=0, swapaxes=True):
         image = ImageHandler().read(file + ':mrc')
