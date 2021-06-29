@@ -31,7 +31,7 @@ from pyworkflow.object import String
 from pwem.protocols import EMProtocol
 import pwem.viewers.views as vi
 from .views_tkinter_tree import Tomo3DTreeProvider
-from .views_tkinter_tree import Tomo3DDialog
+from .views_tkinter_tree import Tomo3DDialog, ViewerMRCDialog
 
 import tomo.objects
 from ..protocols import XmippProtFilterbyNormal
@@ -69,13 +69,13 @@ class Tomo3DDataViewer(pwviewer.Viewer):
         volIds = outputCoords.aggregate(["MAX"], "_volId", ["_volId"])
         volIds = [d['_volId'] for d in volIds]
 
-        # tomoList = [tomos[objId].clone() for objId in volIds]
-        tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
+        tomoList = [tomos[objId].clone() for objId in volIds]
+        # tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
         tomoProvider = Tomo3DTreeProvider(tomoList)
 
         if issubclass(cls, tomo.objects.SetOfCoordinates3D):
-            Tomo3DDialog(self._tkRoot, outputCoords, None, provider=tomoProvider)
+            ViewerMRCDialog(self._tkRoot, outputCoords, provider=tomoProvider)
         elif issubclass(cls, EMProtocol):
-            Tomo3DDialog(self._tkRoot, outputCoords, obj.outputset, provider=tomoProvider)
+            ViewerMRCDialog(self._tkRoot, outputCoords, provider=tomoProvider)
 
         return views
