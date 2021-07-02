@@ -23,12 +23,13 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import numpy as np
 from pyworkflow import utils as pwutils
 from pyworkflow.gui.dialog import ToolbarListDialog
 from pyworkflow.gui.tree import TreeProvider
 
 from .viewer_triangulations import TriangulationPlot, guiThread
+from .viewer_mrc import MrcPlot
 from ..utils import delaunayTriangulation
 
 from tomo.utils import extractVesicles, initDictVesicles, normalFromMatrix
@@ -45,8 +46,8 @@ class Tomo3DTreeProvider(TreeProvider):
         return [('Tomogram', 300)]
 
     def getObjectInfo(self, tomo):
-        # tomogramName = pwutils.removeBaseExt(tomo.getFileName())
-        tomogramName = pwutils.removeBaseExt(tomo.get())
+        tomogramName = pwutils.removeBaseExt(tomo.getFileName())
+        # tomogramName = pwutils.removeBaseExt(tomo.get())
 
         return {'key': tomogramName, 'parent': None,
                 'text': tomogramName,
@@ -122,3 +123,35 @@ class Tomo3DDialog(ToolbarListDialog):
 
         classArgs = {'meshes': shells, 'clouds': vesicles, 'extNormals_List': normals, 'extNormals_coords': extcoords}
         guiThread(TriangulationPlot, 'initializePlot', **classArgs)
+
+class ViewerMRCDialog(ToolbarListDialog):
+    """
+    This class extend from ListDialog to allow calling
+    a pyvista viewer subprocess from a list of Tomograms.
+    """
+
+    def __init__(self, parent, coords, **kwargs):
+        self.coords = coords
+        self.provider = kwargs.get("provider", None)
+        ToolbarListDialog.__init__(self, parent,
+                                   "Tomogram List",
+                                   allowsEmptySelection=False,
+                                   itemDoubleClick=self.doubleClickOnTomogram,
+                                   **kwargs)
+
+    def doubleClickOnTomogram(self, tomo=None):
+        tomo_path = tomo.getFileName()
+        coord_list = []
+        direction_list = []
+        for coord in self.coords.iterCoordinates(volume=tomo):
+            direction = normalFromMatrix(coord.getMatrix())
+            position = [coord.getX(const.BOTTOM_LEFT_CORNER),
+                        coord.getY(const.BOTTOM_LEFT_CORNER),
+                        coord.getZ(const.BOTTOM_LEFT_CORNER),
+                        coord.getObjId()]
+            coord_list.append(position)
+            direction_list.append(direction)
+        np.savetxt('positions.txt', np.asarray(coord_list))
+        np.savetxt('directions.txt', np.asarray(direction_list))
+        viewer_args = {'tomo_mrc': tomo_path, 'points': 'positions.txt', 'normals': 'directions.txt'}
+        guiThread(MrcPlot, 'initializePlot', **viewer_args)
