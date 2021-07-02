@@ -39,6 +39,8 @@ from scipy.ndimage import zoom, gaussian_filter
 from skimage import measure
 from skimage.morphology import binary_dilation, binary_erosion, ball
 
+import pyworkflow.utils as pwutils
+
 from pwem.emlib.image import ImageHandler
 
 
@@ -63,15 +65,16 @@ class MrcPlot(object):
                  binning=None, sigma=1., triangulation=False):
         if binning is None:
             if tomo_mrc is not None:
-                binning = self.getBinning(tomo_mrc)
+                self.binning = self.getBinning(tomo_mrc)
             elif mask_mrc is not None:
-                binning = self.getBinning(mask_mrc)
+                self.binning = self.getBinning(mask_mrc)
             else:
-                binning = 0
-        self.tomo = self.readMRC(tomo_mrc, order=5, binning=binning) if tomo_mrc is not None else None
-        self.mask = self.readMRC(mask_mrc, binning=binning) if mask_mrc is not None else None
+                self.binning = 0
+        self.tomo = self.readMRC(tomo_mrc, order=5, binning=self.binning) if tomo_mrc is not None else None
+        self.mask = self.readMRC(mask_mrc, binning=self.binning) if mask_mrc is not None else None
         self.points = np.loadtxt(points, delimiter=' ') if points is not None else None
         self.normals = np.loadtxt(normals, delimiter=' ') if normals is not None else None
+        self.save_basename = pwutils.removeBaseExt(tomo_mrc) if tomo_mrc is not None and points is not None else None
 
         # Get Pyvista Objects
         if isinstance(self.tomo, np.ndarray):
@@ -81,8 +84,9 @@ class MrcPlot(object):
             labels = np.unique(self.mask)[1:]
             self.pv_masks = [self.surfaceFromMRC(self.mask, label=label) for label in labels]
         if isinstance(self.points, np.ndarray):
+            self.points_ids = self.points[:, 3]
             self.points = np.column_stack([self.points[:, 1], self.points[:, 0], self.points[:, 2]])
-            self.points /= 2 ** binning  # Binning Scaling
+            self.points /= 2 ** self.binning  # Binning Scaling
             self.pv_points = pv.PolyData(self.points)
         if isinstance(self.normals, np.ndarray):
             self.normals = np.column_stack([self.normals[:, 1], self.normals[:, 0], self.normals[:, 2]])
@@ -123,11 +127,13 @@ class MrcPlot(object):
             # Picking Callbacks
             def removeSelection(selection):
                 self.pv_points.remove_cells(selection.active_scalars, inplace=True)
+                self.points_ids = np.delete(self.points_ids, selection.active_scalars)
                 if self.normals is not None:
                     self.pv_normals = np.delete(self.pv_normals, selection.active_scalars, 0)
                     self.plt.remove_actor(self.normals_actor)
-                    self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
-                                                             mag=10, color='red', reset_camera=False)
+                    if self.buttonNormals.GetRepresentation().GetState():
+                        self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
+                                                                 mag=10, color='red', reset_camera=False)
 
             def enableRemoveSelection():
                 self.plt.enable_cell_picking(mesh=self.pv_points,
@@ -288,4 +294,8 @@ class MrcPlot(object):
 
     def initializePlot(self):
         self.plt.app.exec_()
+
+        # Save Points and Normals
+        if self.save_basename is not None:
+            np.savetxt(self.save_basename + '_indices.txt', self.points_ids, delimiter=' ')
 
