@@ -112,7 +112,7 @@ class MrcPlot(object):
             self.plt.add_text('Tomogram', position=(pos, 65.), font_size=12)
             pos += 170.
             self.buttonSliceTomo = self.plt.add_checkbox_button_widget(callback=self.toogleSlice, position=(pos, 10.))
-            self.plt.add_text('Slice Mode', position=(pos, 65.), font_size=12)
+            self.plt.add_text('Slice mode', position=(pos, 65.), font_size=12)
 
         if isinstance(self.mask, np.ndarray):
             pos += 170. if pos != 0 else 45.
@@ -141,7 +141,7 @@ class MrcPlot(object):
                                              font_size=12, opacity=0)
 
             # Picking Controls
-            self.plt.main_menu.addAction('Point Removal', enableRemoveSelection)
+            self.plt.main_menu.addAction('Point removal', enableRemoveSelection)
 
         if isinstance(self.normals, np.ndarray):
             pos += 170. if pos != 0 else 45.
