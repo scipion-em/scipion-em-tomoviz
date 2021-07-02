@@ -23,15 +23,19 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os.path
 
-
+import numpy as np
 import pyworkflow.viewer as pwviewer
 from pyworkflow.object import String
+from pyworkflow.gui.dialog import askYesNo
+from pyworkflow.utils.properties import Message
+import pyworkflow.utils as pwutils
 
 from pwem.protocols import EMProtocol
 import pwem.viewers.views as vi
 from .views_tkinter_tree import Tomo3DTreeProvider
-from .views_tkinter_tree import Tomo3DDialog
+from .views_tkinter_tree import Tomo3DDialog, ViewerMRCDialog
 
 import tomo.objects
 from ..protocols import XmippProtFilterbyNormal
@@ -69,13 +73,40 @@ class Tomo3DDataViewer(pwviewer.Viewer):
         volIds = outputCoords.aggregate(["MAX"], "_volId", ["_volId"])
         volIds = [d['_volId'] for d in volIds]
 
-        # tomoList = [tomos[objId].clone() for objId in volIds]
-        tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
+        tomoList = [tomos[objId].clone() for objId in volIds]
+        # tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
         tomoProvider = Tomo3DTreeProvider(tomoList)
+        ViewerMRCDialog(self._tkRoot, outputCoords, provider=tomoProvider)
 
-        if issubclass(cls, tomo.objects.SetOfCoordinates3D):
-            Tomo3DDialog(self._tkRoot, outputCoords, None, provider=tomoProvider)
-        elif issubclass(cls, EMProtocol):
-            Tomo3DDialog(self._tkRoot, outputCoords, obj.outputset, provider=tomoProvider)
+        import tkinter as tk
+        frame = tk.Frame()
+        if askYesNo(Message.TITLE_SAVE_OUTPUT, Message.LABEL_SAVE_OUTPUT, frame):
+            protocol = self.protocol
+            suffix = protocol._getOutputSuffix(tomo.objects.SetOfCoordinates3D)
+            updated_set = protocol._createSetOfCoordinates3D(tomos, suffix)
+            updated_set.setName("Selected Coordinates")
+            updated_set.setPrecedents(tomos)
+            updated_set.setSamplingRate(tomos.getSamplingRate())
+            updated_set.setBoxSize(outputCoords.getBoxSize())
+            for item in tomoList:
+                basename = pwutils.removeBaseExt(item.getFileName())
+                indices_file = basename + '_indices.txt'
+                if os.path.isfile(indices_file):
+                    indices = np.loadtxt(indices_file, delimiter=' ')
+                    for index in indices:
+                        updated_set.append(outputCoords[index].clone())
+                    pwutils.cleanPath(indices_file)
+            name = protocol.OUTPUT_PREFIX + suffix
+            args = {}
+            args[name] = updated_set
+            protocol._defineOutputs(**args)
+            protocol._defineSourceRelation(tomos, updated_set)
+            protocol._updateOutputSet(name, updated_set, state=updated_set.STREAM_CLOSED)
+        else:
+            for item in tomoList:
+                basename = pwutils.removeBaseExt(item.getFileName())
+                indices_file = basename + '_indices.txt'
+                if os.path.isfile(indices_file):
+                    pwutils.cleanPath(indices_file)
 
         return views
