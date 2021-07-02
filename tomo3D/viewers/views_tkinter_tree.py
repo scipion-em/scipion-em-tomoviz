@@ -147,7 +147,8 @@ class ViewerMRCDialog(ToolbarListDialog):
             direction = normalFromMatrix(coord.getMatrix())
             position = [coord.getX(const.BOTTOM_LEFT_CORNER),
                         coord.getY(const.BOTTOM_LEFT_CORNER),
-                        coord.getZ(const.BOTTOM_LEFT_CORNER)]
+                        coord.getZ(const.BOTTOM_LEFT_CORNER),
+                        coord.getObjId()]
             coord_list.append(position)
             direction_list.append(direction)
         np.savetxt('positions.txt', np.asarray(coord_list))
