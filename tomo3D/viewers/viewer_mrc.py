@@ -101,7 +101,7 @@ class MrcPlot(object):
         self.points_actor = None
         self.normals_actor = None
 
-        self.plt = pvqt.BackgroundPlotter()
+        self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer')
         self.plt.main_menu.clear()
 
         pos = 0.
