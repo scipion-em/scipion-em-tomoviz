@@ -60,7 +60,7 @@ class VtkPlot(object):
         self.vectors_actor = None
         self.surf_actor = None
 
-        self.plt = pvqt.BackgroundPlotter(window_size=(1200, 800))
+        self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer', window_size=(1200, 800))
         self.plt.main_menu.clear()
 
         pos = 0.
