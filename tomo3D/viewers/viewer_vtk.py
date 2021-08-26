@@ -56,9 +56,14 @@ class VtkPlot(object):
         self.vti_actor = None
         self.graph_actor = None
         self.net_actor = None
+        self.net_slice_actor = None
         self.peaks_actor = None
         self.vectors_actor = None
         self.surf_actor = None
+
+        self.plane_widgets = []
+        self.cut_origin = None
+        self.cut_normal = None
 
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer', window_size=(1200, 800))
         self.plt.main_menu.clear()
@@ -83,8 +88,8 @@ class VtkPlot(object):
             self.buttonVti = self.plt.add_checkbox_button_widget(callback=self.plotVti, position=(pos, 10.))
             self.plt.add_text('Tomogram', position=(pos, 65.), font_size=12)
             pos += 170.
-            self.buttonSliceVti = self.plt.add_checkbox_button_widget(callback=self.toogleSlice, position=(pos, 10.))
-            self.plt.add_text('Slice Mode', position=(pos, 65.), font_size=12)
+            self.buttonSliceVti = self.plt.add_checkbox_button_widget(callback=self.toogleTomoSlice, position=(pos, 10.))
+            self.plt.add_text('Tomo Slice', position=(pos, 65.), font_size=12)
 
         if self.graph:
             pos += 170. if pos != 0 else 45.
@@ -105,6 +110,9 @@ class VtkPlot(object):
             pos += 170. if pos != 0 else 45.
             self.plt.add_text('Net', position=(pos, 65.), font_size=12)
             self.buttonNet = self.plt.add_checkbox_button_widget(callback=self.plotNet, position=(pos, 10.))
+            pos += 170.
+            self.buttonSliceNet = self.plt.add_checkbox_button_widget(callback=self.toogleNetSlice, position=(pos, 10.))
+            self.plt.add_text('Net Slice', position=(pos, 65.), font_size=12)
 
             # Color By Menu
             self.callbacks_net = {}
@@ -134,36 +142,86 @@ class VtkPlot(object):
         if value:
             self.vti_actor = self.plt.add_mesh_slice(self.vti, normal='z', cmap="bone", show_scalar_bar=False,
                                                      outline_translation=False, origin_translation=False)
+
+            # In order to set our own callback to the widget, we need to turn off the current widget
+            # And turning it on again with the custom function we want to use
+            self.plt.plane_widgets[-1].Off()
+            del self.plt.plane_widgets[-1]
             self.buttonSliceVti.GetRepresentation().SetState(True)
+            self.toogleTomoSlice(True)
+
             self.plt.reset_camera()
         else:
+            idx = self.plane_widgets.index(self.vti_actor)
+            self.plt.plane_widgets[idx].Off()
+            del self.plt.plane_widgets[idx]
+            del self.plane_widgets[idx]
             self.plt.remove_actor(self.vti_actor)
-            self.plt.clear_plane_widgets()
             self.buttonSliceVti.GetRepresentation().SetState(False)
             self.vti_actor = None
 
-    def toogleSlice(self, value):
+            # We need to check if we have a Net Slice and remove if it exists
+            if self.buttonSliceNet.GetRepresentation().GetState():
+                self.plt.remove_actor(self.net_slice_actor)
+                self.net_slice_actor = None
+                self.buttonSliceNet.GetRepresentation().SetState(False)
+
+            # We remove all the slice meshes and restore the plane widget variable of the viewer
+            del self.plt.plane_sliced_meshes
+            self.plane_widgets = []
+
+    def toogleTomoSlice(self, value):
         if value:
             if self.buttonVti.GetRepresentation().GetState():
-                plane_sliced_mesh = self.plt.plane_sliced_meshes[0]
-                alg = vtk.vtkCutter()
-                alg.SetInputDataObject(self.vti)
+                if self.vti_actor in self.plane_widgets:
+                    idx = self.plane_widgets.index(self.vti_actor)
+                    self.plt.plane_widgets[idx].On()
+                else:
+                    # Since Tomo button will toggle this automatically, it is safe to append here the tomo
+                    # actor to the currently active plane widgets
+                    self.plane_widgets.append(self.vti_actor)
 
-                def callback(normal, origin):
-                    plane = generate_plane(normal, origin)
-                    alg.SetCutFunction(plane)
-                    alg.Update()
-                    plane_sliced_mesh.shallow_copy(alg.GetOutput())
+                    # Create all the vtkCutter objects that will be updated
+                    alg_tomo, alg_net = vtk.vtkCutter(), vtk.vtkCutter()
+                    alg_tomo.SetInputDataObject(self.vti)
+                    alg_net.SetInputDataObject(self.net)
 
-                self.plt.add_plane_widget(callback=callback, bounds=self.vti.bounds,
-                                          factor=1.25, normal='z',
-                                          origin_translation=False,
-                                          outline_translation=False,
-                                          origin=self.vti.center)
+                    # This callback is called everytime the Tomo Slice (Cut) is updated
+                    # by the user (move, rotation) or because it is newly created
+                    def callback(normal, origin):
+                        # Update cut normal and origin stored in the widget
+                        self.cut_normal = normal
+                        self.cut_origin = origin
+                        # Create a new Plane based on new normal/origin
+                        plane = generate_plane(normal, origin)
+                        # Update Tomo Slice (Cut) position based on new plane
+                        alg_tomo.SetCutFunction(plane)
+                        alg_tomo.Update()
+                        idx = self.plane_widgets.index(self.vti_actor)
+                        plane_sliced_tomo = self.plt.plane_sliced_meshes[idx]
+                        plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                        # This callback also takes into account the Net Plane
+                        # In case it exists, it is update so it matches the current orientation of the
+                        # Tomogram Slice
+                        if self.buttonSliceNet.GetRepresentation().GetState():
+                            alg_net.SetCutFunction(plane)
+                            alg_net.Update()
+                            idx = self.plane_widgets.index(self.net_slice_actor)
+                            plane_sliced_net = self.plt.plane_sliced_meshes[idx]
+                            plane_sliced_net.shallow_copy(alg_net.GetOutput())
+
+                    self.plt.add_plane_widget(callback=callback, bounds=self.vti.bounds,
+                                              factor=1.25, normal='z',
+                                              origin_translation=False,
+                                              outline_translation=False,
+                                              origin=self.vti.center)
             else:
                 self.buttonSliceVti.GetRepresentation().SetState(False)
         else:
-            self.plt.clear_plane_widgets()
+            idx = self.plane_widgets.index(self.vti_actor)
+            self.plt.plane_widgets[idx].Off()
+        print(len(self.plt.plane_widgets))
+        print(len(self.plt.plane_sliced_meshes))
 
     def plotGraph(self, value):
         if value:
@@ -175,9 +233,46 @@ class VtkPlot(object):
     def plotNet(self, value):
         if value:
             self.net_actor = self.plt.add_mesh(self.net, show_scalar_bar=False, colormap="cool")
+            if self.buttonSliceNet.GetRepresentation().GetState():
+                self.buttonSliceNet.GetRepresentation().SetState(False)
+                self.plt.remove_actor(self.net_slice_actor)
+                self.net_slice_actor = None
         else:
             self.plt.remove_actor(self.net_actor)
             self.net_actor = None
+
+    def toogleNetSlice(self, value):
+        if value:
+            if self.buttonVti.GetRepresentation().GetState():
+                # We create a new Plane to perform a cut to Net
+                alg = vtk.vtkCutter()
+                alg.SetInputDataObject(self.net)
+                plane_sliced_mesh = pv.wrap(alg.GetOutput())
+                plane = generate_plane(self.cut_normal, self.cut_origin)
+                alg.SetCutFunction(plane)
+                alg.Update()
+                plane_sliced_mesh.shallow_copy(alg.GetOutput())
+
+                # Create the actor and add the plane to Pyvista plane_slice_meshes and plane_widgets to update
+                # it in the future
+                self.net_slice_actor = self.plt.add_mesh(plane_sliced_mesh, show_scalar_bar=False, colormap="cool")
+                self.plt.plane_sliced_meshes.append(plane_sliced_mesh)
+                self.plane_widgets.append(self.net_slice_actor)
+
+                if self.buttonNet.GetRepresentation().GetState():
+                    self.buttonNet.GetRepresentation().SetState(False)
+                    self.plt.remove_actor(self.net_actor)
+                    self.net_actor = None
+            else:
+                self.buttonSliceNet.GetRepresentation().SetState(False)
+        else:
+            self.plt.remove_actor(self.net_slice_actor)
+            self.net_slice_actor = None
+            # Since we only add the tomo before the Net Slice, we know that the last appended element to
+            # the sliced meshes is going to be the Net Slice Mesh
+            del self.plt.plane_sliced_meshes[-1]
+            del self.plane_widgets[-1]
+
 
     def plotPeaks(self, value):
         mag = 0.02 * self.vti.dimensions[0]
