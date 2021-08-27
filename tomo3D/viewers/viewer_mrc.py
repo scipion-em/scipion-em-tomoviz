@@ -102,7 +102,7 @@ class MrcPlot(object):
         self.mask_actors = []
         self.points_actor = None
         self.normals_actor = None
-        self.box_actor = []
+        self.box_actor = {}
 
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer')
         self.plt.main_menu.clear()
@@ -135,6 +135,7 @@ class MrcPlot(object):
             # Picking Callbacks
             def removeSelection(selection):
                 self.pv_points.remove_cells(selection.active_scalars, inplace=True)
+                ids_removed = self.points_ids[selection.active_scalars]
                 self.points_ids = np.delete(self.points_ids, selection.active_scalars)
                 if self.normals is not None:
                     self.pv_normals = np.delete(self.pv_normals, selection.active_scalars, 0)
@@ -142,6 +143,9 @@ class MrcPlot(object):
                     if self.buttonNormals.GetRepresentation().GetState():
                         self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
                                                                  mag=10, color='red', reset_camera=False)
+                if self.buttonBoxes.GetRepresentation().GetState():
+                    for point_id in ids_removed:
+                        self.plt.remove_actor(self.box_actor[int(point_id - 1)])
 
             def enableRemoveSelection():
                 self.plt.enable_cell_picking(mesh=self.pv_points,
@@ -294,15 +298,16 @@ class MrcPlot(object):
 
     def plotBoxes(self, value):
         if value:
-            for point in self.points:
-                cube = pv.Cube(point, x_length=self.boxSize, y_length=self.boxSize,
-                                              z_length=self.boxSize)
-                self.box_actor.append(self.plt.add_mesh(cube, show_scalar_bar=False, style='wireframe',
-                                                        color='red'))
+            for point_id in self.points_ids:
+                idp = int(point_id - 1)
+                cube = pv.Cube(self.points[idp],
+                               x_length=self.boxSize, y_length=self.boxSize, z_length=self.boxSize)
+                self.box_actor[idp] = self.plt.add_mesh(cube, show_scalar_bar=False, style='wireframe',
+                                                        color='red')
         else:
-            for actor in self.box_actor:
+            for actor in self.box_actor.values():
                 self.plt.remove_actor(actor)
-            self.box_actor = []
+            self.box_actor = {}
 
     def plotNormals(self, value):
         if value:
