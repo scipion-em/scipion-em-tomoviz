@@ -51,6 +51,7 @@ class MrcPlot(object):
          - tomo_mrc (Path (Str) - Optional): File containing a Volume (in MRC format)
          - mask_mrc (Path (Str) - Optional): File containing a Mask (in MRC format)
          - points (Path (Str) - Optional): File containing a SetOfCoordinates3D (in TEXT format)
+         - boxSize (Double - Optional): Box size associated to points
          - normals (Path (Str) - Optional): File containing a Set of Normals (in TEXT format)
          - binning (Float - Optional):  Binning factor to be applied to tomo_mrc and mask_mrc (Very useful to save time)
          - sigma (Float - Optional):  Gaussian Filter width
@@ -61,7 +62,7 @@ class MrcPlot(object):
          plt.initializePlot()
     '''
 
-    def __init__(self, tomo_mrc=None, mask_mrc=None, points=None, normals=None,
+    def __init__(self, tomo_mrc=None, mask_mrc=None, points=None, boxSize=None, normals=None,
                  binning=None, sigma=1., triangulation=False):
         if binning is None:
             if tomo_mrc is not None:
@@ -74,6 +75,7 @@ class MrcPlot(object):
         self.mask = self.readMRC(mask_mrc, binning=self.binning) if mask_mrc is not None else None
         self.points = np.loadtxt(points, delimiter=' ') if points is not None else None
         self.normals = np.loadtxt(normals, delimiter=' ') if normals is not None else None
+        self.boxSize = boxSize
         self.save_basename = pwutils.removeBaseExt(tomo_mrc) if tomo_mrc is not None and points is not None else None
 
         # Get Pyvista Objects
@@ -100,6 +102,7 @@ class MrcPlot(object):
         self.mask_actors = []
         self.points_actor = None
         self.normals_actor = None
+        self.box_actor = []
 
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer')
         self.plt.main_menu.clear()
@@ -123,6 +126,11 @@ class MrcPlot(object):
             pos += 170. if pos != 0 else 45.
             self.plt.add_text('Coords', position=(pos, 65.), font_size=12)
             self.buttonPoints = self.plt.add_checkbox_button_widget(callback=self.plotPoints, position=(pos, 10.))
+
+            if self.boxSize is not None:
+                pos += 170.
+                self.plt.add_text('Boxes', position=(pos, 65.), font_size=12)
+                self.buttonBoxes = self.plt.add_checkbox_button_widget(callback=self.plotBoxes, position=(pos, 10.))
 
             # Picking Callbacks
             def removeSelection(selection):
@@ -283,6 +291,18 @@ class MrcPlot(object):
         else:
             self.plt.remove_actor(self.points_actor)
             self.points_actor = None
+
+    def plotBoxes(self, value):
+        if value:
+            for point in self.points:
+                cube = pv.Cube(point, x_length=self.boxSize, y_length=self.boxSize,
+                                              z_length=self.boxSize)
+                self.box_actor.append(self.plt.add_mesh(cube, show_scalar_bar=False, style='wireframe',
+                                                        color='red'))
+        else:
+            for actor in self.box_actor:
+                self.plt.remove_actor(actor)
+            self.box_actor = []
 
     def plotNormals(self, value):
         if value:

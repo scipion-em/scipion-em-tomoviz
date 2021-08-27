@@ -151,7 +151,9 @@ class ViewerMRCDialog(ToolbarListDialog):
                         coord.getObjId()]
             coord_list.append(position)
             direction_list.append(direction)
+        boxSize = self.coords.getBoxSize()
         np.savetxt('positions.txt', np.asarray(coord_list))
         np.savetxt('directions.txt', np.asarray(direction_list))
-        viewer_args = {'tomo_mrc': tomo_path, 'points': 'positions.txt', 'normals': 'directions.txt'}
+        viewer_args = {'tomo_mrc': tomo_path, 'points': 'positions.txt', 'normals': 'directions.txt',
+                       'boxSize': boxSize}
         guiThread(MrcPlot, 'initializePlot', **viewer_args)
