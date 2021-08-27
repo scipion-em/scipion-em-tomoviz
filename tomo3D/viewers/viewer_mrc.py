@@ -75,7 +75,7 @@ class MrcPlot(object):
         self.mask = self.readMRC(mask_mrc, binning=self.binning) if mask_mrc is not None else None
         self.points = np.loadtxt(points, delimiter=' ') if points is not None else None
         self.normals = np.loadtxt(normals, delimiter=' ') if normals is not None else None
-        self.boxSize = boxSize
+        self.boxSize = boxSize / 2 ** self.binning
         self.save_basename = pwutils.removeBaseExt(tomo_mrc) if tomo_mrc is not None and points is not None else None
 
         # Get Pyvista Objects
@@ -303,7 +303,7 @@ class MrcPlot(object):
                 cube = pv.Cube(self.points[idp],
                                x_length=self.boxSize, y_length=self.boxSize, z_length=self.boxSize)
                 self.box_actor[idp] = self.plt.add_mesh(cube, show_scalar_bar=False, style='wireframe',
-                                                        color='red')
+                                                        color='blue')
         else:
             for actor in self.box_actor.values():
                 self.plt.remove_actor(actor)
