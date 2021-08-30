@@ -87,9 +87,19 @@ class MrcPlot(object):
             self.pv_masks = [self.surfaceFromMRC(self.mask, label=label) for label in labels]
         if isinstance(self.points, np.ndarray):
             self.points_ids = self.points[:, 3]
+            self.group_ids = self.points[:, 4]
             self.points = np.column_stack([self.points[:, 1], self.points[:, 0], self.points[:, 2]])
             self.points /= 2 ** self.binning  # Binning Scaling
             self.pv_points = pv.PolyData(self.points)
+            scalar_colors = np.zeros([self.points.shape[0], 4])
+            cmap = matplotlib.cm.get_cmap('jet')
+            unique_ids = np.unique(self.group_ids)
+            cmap_ids = np.linspace(0, 1, len(unique_ids))
+            for group_id, cmap_id in zip(unique_ids, cmap_ids):
+                idp = np.where(self.group_ids == group_id)
+                scalar_colors[idp] = cmap(cmap_id)
+                # scalar_colors[idp] *= 255
+            self.pv_points["colors"] = scalar_colors
         if isinstance(self.normals, np.ndarray):
             self.normals = np.column_stack([self.normals[:, 1], self.normals[:, 0], self.normals[:, 2]])
             # vecLength = np.amax(pdist(self.pv_points.points))
@@ -100,7 +110,7 @@ class MrcPlot(object):
         self.tomo_actor = []
         self.tomo_slice_actor = None
         self.mask_actors = []
-        self.points_actor = None
+        self.points_actor = []
         self.normals_actor = None
         self.box_actor = {}
 
@@ -134,11 +144,12 @@ class MrcPlot(object):
 
             # Picking Callbacks
             def removeSelection(selection):
-                self.pv_points.remove_cells(selection.active_scalars, inplace=True)
-                ids_removed = self.points_ids[selection.active_scalars]
-                self.points_ids = np.delete(self.points_ids, selection.active_scalars)
+                selected = selection['orig_extract_id']
+                self.pv_points.remove_cells(selected, inplace=True)
+                ids_removed = self.points_ids[selected]
+                self.points_ids = np.delete(self.points_ids, selected)
                 if self.normals is not None:
-                    self.pv_normals = np.delete(self.pv_normals, selection.active_scalars, 0)
+                    self.pv_normals = np.delete(self.pv_normals, selected, 0)
                     self.plt.remove_actor(self.normals_actor)
                     if self.buttonNormals.GetRepresentation().GetState():
                         self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
@@ -290,11 +301,13 @@ class MrcPlot(object):
 
     def plotPoints(self, value):
         if value:
-            self.points_actor = self.plt.add_mesh(self.pv_points, show_scalar_bar=False, color='orange',
-                                                  render_points_as_spheres=True, reset_camera=False)
+            self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
+                                                       cmap="jet",
+                                                       render_points_as_spheres=True, reset_camera=False))
         else:
-            self.plt.remove_actor(self.points_actor)
-            self.points_actor = None
+            for actor in self.points_actor:
+                self.plt.remove_actor(actor)
+            self.points_actor = []
 
     def plotBoxes(self, value):
         if value:

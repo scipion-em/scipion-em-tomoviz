@@ -149,6 +149,7 @@ class ViewerMRCDialog(ToolbarListDialog):
                         coord.getY(const.BOTTOM_LEFT_CORNER),
                         coord.getZ(const.BOTTOM_LEFT_CORNER),
                         coord.getObjId()]
+            position.append(coord.getGroupId()) if coord.getGroupId() is not None else position.append(0)
             coord_list.append(position)
             direction_list.append(direction)
         boxSize = self.coords.getBoxSize()
