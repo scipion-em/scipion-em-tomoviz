@@ -98,7 +98,6 @@ class MrcPlot(object):
             for group_id, cmap_id in zip(unique_ids, cmap_ids):
                 idp = np.where(self.group_ids == group_id)
                 scalar_colors[idp] = cmap(cmap_id)
-                # scalar_colors[idp] *= 255
             self.pv_points["colors"] = scalar_colors
         if isinstance(self.normals, np.ndarray):
             self.normals = np.column_stack([self.normals[:, 1], self.normals[:, 0], self.normals[:, 2]])
