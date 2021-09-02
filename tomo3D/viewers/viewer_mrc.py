@@ -28,7 +28,9 @@
 
 import pyvistaqt as pvqt
 import pyvista as pv
+from pyvista.utilities import generate_plane
 import pymeshfix as pm
+import vtk
 
 import numpy as np
 import matplotlib
@@ -125,6 +127,142 @@ class MrcPlot(object):
             pos += 170.
             self.buttonSliceTomo = self.plt.add_checkbox_button_widget(callback=self.toogleSlice, position=(pos, 10.))
             self.plt.add_text('Slice mode', position=(pos, 65.), font_size=12)
+
+            self.plt.clear_events_for_key("Up")
+            # Callback to move the slice with the up arrows in the keyboard
+            def sliceUp():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray(current_plane.GetNormal())
+                    # Normalize normal
+                    normal /= np.linalg.norm(normal)
+                    # move plane one unit in the direction of the normal
+                    origin += normal
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("Up", sliceUp)
+
+            self.plt.clear_events_for_key("Down")
+            # Callback to move the slice with the down arrows in the keyboard
+            def sliceDown():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray(current_plane.GetNormal())
+                    # Normalize normal
+                    normal /= np.linalg.norm(normal)
+                    # move plane one unit in the direction of the normal
+                    origin -= normal
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("Down", sliceDown)
+
+            # Callback to place plane normal along X
+            def sliceX():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray([1, 0, 0])
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("x", sliceX)
+
+            # Callback to place plane normal along Y
+            def sliceY():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray([0, 1, 0])
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("y", sliceY)
+
+            # Callback to place plane normal along Z
+            def sliceZ():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray([0, 0, 1])
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("z", sliceZ)
+
+            # Callback to reset plane origin
+            def reserOrigin():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(self.pv_tomo_slice.center)
+                    normal = np.asarray(np.asarray(current_plane.GetNormal()))
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("o", reserOrigin)
 
         if isinstance(self.mask, np.ndarray):
             pos += 170. if pos != 0 else 45.
