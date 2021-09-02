@@ -220,8 +220,6 @@ class VtkPlot(object):
         else:
             idx = self.plane_widgets.index(self.vti_actor)
             self.plt.plane_widgets[idx].Off()
-        print(len(self.plt.plane_widgets))
-        print(len(self.plt.plane_sliced_meshes))
 
     def plotGraph(self, value):
         if value:
