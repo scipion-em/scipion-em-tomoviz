@@ -439,7 +439,7 @@ class MrcPlot(object):
     def plotPoints(self, value):
         if value:
             self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
-                                                       render_points_as_spheres=True, reset_camera=False))
+                                                       cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=False))
         else:
             for actor in self.points_actor:
                 self.plt.remove_actor(actor)
