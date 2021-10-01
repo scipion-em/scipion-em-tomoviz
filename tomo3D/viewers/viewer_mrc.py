@@ -31,6 +31,7 @@ import pyvista as pv
 from pyvista.utilities import generate_plane
 import pymeshfix as pm
 import vtk
+from PyQt5 import QtGui
 
 import numpy as np
 import matplotlib
@@ -45,6 +46,8 @@ import pyworkflow.utils as pwutils
 
 from pwem.emlib.image import ImageHandler
 
+from tomo3D import Plugin
+
 
 class MrcPlot(object):
     '''
@@ -57,7 +60,7 @@ class MrcPlot(object):
          - normals (Path (Str) - Optional): File containing a Set of Normals (in TEXT format)
          - binning (Float - Optional):  Binning factor to be applied to tomo_mrc and mask_mrc (Very useful to save time)
          - sigma (Float - Optional):  Gaussian Filter width
-         - triangulation (Bool - Optional): Tells if the representation of the Tomomgra is Voxel based on Triangle based
+         - triangulation (Bool - Optional): Tells if the representation of the Tomogram is Voxel based on Triangle based
     Usage:
          import MRCPlot
          plt = MRCPlot(tomo_mrc=tomo_mrc, mask_mrc=mask_mrc, binning=2)
@@ -73,6 +76,8 @@ class MrcPlot(object):
                 self.binning = self.getBinning(mask_mrc)
             else:
                 self.binning = 0
+        else:
+            self.binning = binning
         self.tomo = self.readMRC(tomo_mrc, order=5, binning=self.binning) if tomo_mrc is not None else None
         self.mask = self.readMRC(mask_mrc, binning=self.binning) if mask_mrc is not None else None
         self.points = np.loadtxt(points, delimiter=' ') if points is not None else None
@@ -115,8 +120,11 @@ class MrcPlot(object):
         self.normals_actor = None
         self.box_actor = {}
 
+        self.first_reset = True
+
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer')
         self.plt.main_menu.clear()
+        self.plt.app.setWindowIcon(QtGui.QIcon("/home/davidherreros/Softwares/plugins_scipion3/scipion-em-tomo3D/tomo3D/icon.png"))
 
         pos = 0.
 
@@ -377,8 +385,17 @@ class MrcPlot(object):
         return hist, bin_centers
 
     def contours(self, hist, bin_centers):
-        opacities = 1 - hist[np.where((hist > np.std(hist)) * (hist < np.amax(hist)))]
-        contour_values = bin_centers[np.where((hist > np.std(hist)) * (hist < np.amax(hist)))]
+        logic_slicing = np.where((hist > np.std(hist)) * (hist < np.amax(hist)))
+        sliced_hist = hist[logic_slicing]
+        opacities = 1 - sliced_hist
+        contour_values = bin_centers[logic_slicing]
+        # print(1 - opacities)
+        # print(np.mean(1-opacities))
+        # print(contour_values)
+        logic_slicing_2 = np.where(sliced_hist < np.mean(sliced_hist))
+        contour_values = contour_values[logic_slicing_2]
+        # print(contour_values)
+        opacities = opacities[logic_slicing_2]
         return contour_values, opacities
 
     def isovolumes(self, volume, range=0.01, sigma=None, triangulation=True):
@@ -405,9 +422,9 @@ class MrcPlot(object):
 
     def plotTomo(self, value):
         if value:
-            cmap = matplotlib.cm.get_cmap('bone')  # Bone also looks nice
+            cmap = matplotlib.cm.get_cmap('bone')  # Greys also looks nice
             cmap_ids = np.linspace(0, 1, len(self.pv_tomo))
-            self.tomo_actor = [self.plt.add_mesh(actor, show_scalar_bar=False, opacity=op, color=cmap(cid),
+            self.tomo_actor = [self.plt.add_mesh(actor, show_scalar_bar=False, opacity=3*op, color=cmap(cid),
                                                  render_points_as_spheres=True)
                                for actor, op, cid in zip(self.pv_tomo, self.opacities, cmap_ids)]
             self.plt.reset_camera()
@@ -438,8 +455,13 @@ class MrcPlot(object):
 
     def plotPoints(self, value):
         if value:
-            self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
-                                                       cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=False))
+            if self.first_reset:
+                self.first_reset = False
+                self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
+                                                           cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=True))
+            else:
+                self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
+                                                           cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=False))
         else:
             for actor in self.points_actor:
                 self.plt.remove_actor(actor)
@@ -460,8 +482,13 @@ class MrcPlot(object):
 
     def plotNormals(self, value):
         if value:
-            self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
-                                                     mag=10, color='red', reset_camera=False)
+            if self.first_reset:
+                self.first_reset = False
+                self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
+                                                         mag=10, color='red', reset_camera=True)
+            else:
+                self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
+                                                         mag=10, color='red', reset_camera=False)
         else:
             self.plt.remove_actor(self.normals_actor)
             self.normals_actor = None
