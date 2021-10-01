@@ -28,7 +28,9 @@
 
 import pyvistaqt as pvqt
 import pyvista as pv
+from pyvista.utilities import generate_plane
 import pymeshfix as pm
+import vtk
 
 import numpy as np
 import matplotlib
@@ -51,6 +53,7 @@ class MrcPlot(object):
          - tomo_mrc (Path (Str) - Optional): File containing a Volume (in MRC format)
          - mask_mrc (Path (Str) - Optional): File containing a Mask (in MRC format)
          - points (Path (Str) - Optional): File containing a SetOfCoordinates3D (in TEXT format)
+         - boxSize (Double - Optional): Box size associated to points
          - normals (Path (Str) - Optional): File containing a Set of Normals (in TEXT format)
          - binning (Float - Optional):  Binning factor to be applied to tomo_mrc and mask_mrc (Very useful to save time)
          - sigma (Float - Optional):  Gaussian Filter width
@@ -61,7 +64,7 @@ class MrcPlot(object):
          plt.initializePlot()
     '''
 
-    def __init__(self, tomo_mrc=None, mask_mrc=None, points=None, normals=None,
+    def __init__(self, tomo_mrc=None, mask_mrc=None, points=None, boxSize=None, normals=None,
                  binning=None, sigma=1., triangulation=False):
         if binning is None:
             if tomo_mrc is not None:
@@ -74,6 +77,7 @@ class MrcPlot(object):
         self.mask = self.readMRC(mask_mrc, binning=self.binning) if mask_mrc is not None else None
         self.points = np.loadtxt(points, delimiter=' ') if points is not None else None
         self.normals = np.loadtxt(normals, delimiter=' ') if normals is not None else None
+        self.boxSize = boxSize / 2 ** self.binning
         self.save_basename = pwutils.removeBaseExt(tomo_mrc) if tomo_mrc is not None and points is not None else None
 
         # Get Pyvista Objects
@@ -85,9 +89,18 @@ class MrcPlot(object):
             self.pv_masks = [self.surfaceFromMRC(self.mask, label=label) for label in labels]
         if isinstance(self.points, np.ndarray):
             self.points_ids = self.points[:, 3]
+            self.group_ids = self.points[:, 4]
             self.points = np.column_stack([self.points[:, 1], self.points[:, 0], self.points[:, 2]])
             self.points /= 2 ** self.binning  # Binning Scaling
             self.pv_points = pv.PolyData(self.points)
+            scalar_colors = np.zeros([self.points.shape[0], 4])
+            cmap = matplotlib.cm.get_cmap('viridis')
+            unique_ids = np.unique(self.group_ids)
+            cmap_ids = np.linspace(0, 1, len(unique_ids))
+            for group_id, cmap_id in zip(unique_ids, cmap_ids):
+                idp = np.where(self.group_ids == group_id)
+                scalar_colors[idp] = cmap(cmap_id)
+            self.pv_points["colors"] = scalar_colors
         if isinstance(self.normals, np.ndarray):
             self.normals = np.column_stack([self.normals[:, 1], self.normals[:, 0], self.normals[:, 2]])
             # vecLength = np.amax(pdist(self.pv_points.points))
@@ -98,8 +111,9 @@ class MrcPlot(object):
         self.tomo_actor = []
         self.tomo_slice_actor = None
         self.mask_actors = []
-        self.points_actor = None
+        self.points_actor = []
         self.normals_actor = None
+        self.box_actor = {}
 
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer')
         self.plt.main_menu.clear()
@@ -114,6 +128,142 @@ class MrcPlot(object):
             self.buttonSliceTomo = self.plt.add_checkbox_button_widget(callback=self.toogleSlice, position=(pos, 10.))
             self.plt.add_text('Slice mode', position=(pos, 65.), font_size=12)
 
+            self.plt.clear_events_for_key("Up")
+            # Callback to move the slice with the up arrows in the keyboard
+            def sliceUp():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray(current_plane.GetNormal())
+                    # Normalize normal
+                    normal /= np.linalg.norm(normal)
+                    # move plane one unit in the direction of the normal
+                    origin += normal
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("Up", sliceUp)
+
+            self.plt.clear_events_for_key("Down")
+            # Callback to move the slice with the down arrows in the keyboard
+            def sliceDown():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray(current_plane.GetNormal())
+                    # Normalize normal
+                    normal /= np.linalg.norm(normal)
+                    # move plane one unit in the direction of the normal
+                    origin -= normal
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("Down", sliceDown)
+
+            # Callback to place plane normal along X
+            def sliceX():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray([1, 0, 0])
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("x", sliceX)
+
+            # Callback to place plane normal along Y
+            def sliceY():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray([0, 1, 0])
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("y", sliceY)
+
+            # Callback to place plane normal along Z
+            def sliceZ():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(current_plane.GetOrigin())
+                    normal = np.asarray([0, 0, 1])
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("z", sliceZ)
+
+            # Callback to reset plane origin
+            def reserOrigin():
+                if self.tomo_slice_actor is not None:
+                    alg_tomo = vtk.vtkCutter()
+                    current_plane = vtk.vtkPlane()
+                    alg_tomo.SetInputDataObject(self.pv_tomo_slice)
+                    plane_sliced_tomo = self.plt.plane_sliced_meshes[-1]
+                    plane_widget = self.plt.plane_widgets[-1]
+                    plane_widget.GetPlane(current_plane)
+                    origin = np.asarray(self.pv_tomo_slice.center)
+                    normal = np.asarray(np.asarray(current_plane.GetNormal()))
+                    # Create a new plane to update the position and perform the update
+                    plane = generate_plane(normal, origin)
+                    alg_tomo.SetCutFunction(plane)
+                    alg_tomo.Update()
+                    plane_sliced_tomo.shallow_copy(alg_tomo.GetOutput())
+                    plane_widget.SetOrigin(origin)
+                    plane_widget.SetNormal(normal)
+                    plane_widget.UpdatePlacement()
+            self.plt.add_key_event("o", reserOrigin)
+
         if isinstance(self.mask, np.ndarray):
             pos += 170. if pos != 0 else 45.
             self.plt.add_text('Vesicles', position=(pos, 65.), font_size=12)
@@ -124,16 +274,26 @@ class MrcPlot(object):
             self.plt.add_text('Coords', position=(pos, 65.), font_size=12)
             self.buttonPoints = self.plt.add_checkbox_button_widget(callback=self.plotPoints, position=(pos, 10.))
 
+            if self.boxSize is not None:
+                pos += 170.
+                self.plt.add_text('Boxes', position=(pos, 65.), font_size=12)
+                self.buttonBoxes = self.plt.add_checkbox_button_widget(callback=self.plotBoxes, position=(pos, 10.))
+
             # Picking Callbacks
             def removeSelection(selection):
-                self.pv_points.remove_cells(selection.active_scalars, inplace=True)
-                self.points_ids = np.delete(self.points_ids, selection.active_scalars)
+                selected = selection['orig_extract_id']
+                self.pv_points.remove_cells(selected, inplace=True)
+                ids_removed = self.points_ids[selected]
+                self.points_ids = np.delete(self.points_ids, selected)
                 if self.normals is not None:
-                    self.pv_normals = np.delete(self.pv_normals, selection.active_scalars, 0)
+                    self.pv_normals = np.delete(self.pv_normals, selected, 0)
                     self.plt.remove_actor(self.normals_actor)
                     if self.buttonNormals.GetRepresentation().GetState():
                         self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
                                                                  mag=10, color='red', reset_camera=False)
+                if self.buttonBoxes.GetRepresentation().GetState():
+                    for point_id in ids_removed:
+                        self.plt.remove_actor(self.box_actor[int(point_id - 1)])
 
             def enableRemoveSelection():
                 self.plt.enable_cell_picking(mesh=self.pv_points,
@@ -278,11 +438,25 @@ class MrcPlot(object):
 
     def plotPoints(self, value):
         if value:
-            self.points_actor = self.plt.add_mesh(self.pv_points, show_scalar_bar=False, color='orange',
-                                                  render_points_as_spheres=True, reset_camera=False)
+            self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
+                                                       cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=False))
         else:
-            self.plt.remove_actor(self.points_actor)
-            self.points_actor = None
+            for actor in self.points_actor:
+                self.plt.remove_actor(actor)
+            self.points_actor = []
+
+    def plotBoxes(self, value):
+        if value:
+            for point_id in self.points_ids:
+                idp = int(point_id - 1)
+                cube = pv.Cube(self.points[idp],
+                               x_length=self.boxSize, y_length=self.boxSize, z_length=self.boxSize)
+                self.box_actor[idp] = self.plt.add_mesh(cube, show_scalar_bar=False, style='wireframe',
+                                                        color='blue')
+        else:
+            for actor in self.box_actor.values():
+                self.plt.remove_actor(actor)
+            self.box_actor = {}
 
     def plotNormals(self, value):
         if value:

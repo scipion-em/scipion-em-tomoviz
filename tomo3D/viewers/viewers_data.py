@@ -70,11 +70,15 @@ class Tomo3DDataViewer(pwviewer.Viewer):
 
         tomos = outputCoords.getPrecedents()
 
-        volIds = outputCoords.aggregate(["MAX"], "_volId", ["_volId"])
-        volIds = [d['_volId'] for d in volIds]
+        volIds = outputCoords.aggregate(["MAX", "COUNT"], "_volId", ["_volId"])
+        volIds = [(d['_volId'], d["COUNT"]) for d in volIds]
 
-        tomoList = [tomos[objId].clone() for objId in volIds]
-        # tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
+        tomoList = []
+        for objId in volIds:
+            tomogram = tomos[objId[0]].clone()
+            tomogram.count = objId[1]
+            tomoList.append(tomogram)
+                        # tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
         tomoProvider = Tomo3DTreeProvider(tomoList)
         ViewerMRCDialog(self._tkRoot, outputCoords, provider=tomoProvider)
 
