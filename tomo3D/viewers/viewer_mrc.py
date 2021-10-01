@@ -26,6 +26,7 @@
 # **************************************************************************
 
 
+import os
 import pyvistaqt as pvqt
 import pyvista as pv
 from pyvista.utilities import generate_plane
@@ -46,7 +47,7 @@ import pyworkflow.utils as pwutils
 
 from pwem.emlib.image import ImageHandler
 
-from tomo3D import Plugin
+import tomo3D
 
 
 class MrcPlot(object):
@@ -124,7 +125,8 @@ class MrcPlot(object):
 
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer')
         self.plt.main_menu.clear()
-        self.plt.app.setWindowIcon(QtGui.QIcon("/home/davidherreros/Softwares/plugins_scipion3/scipion-em-tomo3D/tomo3D/icon.png"))
+        plugin_path = os.path.dirname(tomo3D.__file__)
+        self.plt.app.setWindowIcon(QtGui.QIcon(os.path.join(plugin_path, "icon.png")))
 
         pos = 0.
 
