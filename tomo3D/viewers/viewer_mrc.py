@@ -126,7 +126,7 @@ class MrcPlot(object):
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer')
         self.plt.main_menu.clear()
         plugin_path = os.path.dirname(tomo3D.__file__)
-        self.plt.app.setWindowIcon(QtGui.QIcon(os.path.join(plugin_path, "icon.png")))
+        self.plt.app.setWindowIcon(QtGui.QIcon(os.path.join(plugin_path, "icon_square.png")))
 
         pos = 0.
 
