@@ -34,7 +34,7 @@ from pyvista.utilities import generate_plane
 import pymeshfix as pm
 import vtk
 from PyQt5 import QtGui
-from PyQt5.QtWidgets import QWidget, QLabel, QApplication, QDesktopWidget
+from PyQt5.QtWidgets import QWidget, QLabel, QDesktopWidget
 from PyQt5.QtCore import Qt, QObject, QThread, pyqtSignal, QRectF
 
 import numpy as np
@@ -86,7 +86,7 @@ class MrcPlot(object):
         self.mask = mask_mrc
         self.points = np.loadtxt(points, delimiter=' ') if points is not None else None
         self.normals = np.loadtxt(normals, delimiter=' ') if normals is not None else None
-        self.boxSize = boxSize / 2 ** self.binning
+        self.boxSize = boxSize / 2 ** self.binning if boxSize is not None else None
         self.save_basename = pwutils.removeBaseExt(tomo_mrc) if tomo_mrc is not None and points is not None else None
 
         # Get Pyvista Objects
