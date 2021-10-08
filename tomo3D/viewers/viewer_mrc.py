@@ -35,7 +35,7 @@ import pymeshfix as pm
 import vtk
 from PyQt5 import QtGui
 from PyQt5.QtWidgets import QWidget, QLabel, QApplication, QDesktopWidget
-from PyQt5.QtCore import Qt, QObject, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QObject, QThread, pyqtSignal, QRectF
 
 import numpy as np
 import matplotlib
@@ -552,6 +552,13 @@ class LoadingScreen(QWidget):
         centerPoint = QDesktopWidget().availableGeometry().center()
         qtRectangle.moveCenter(centerPoint)
         self.move(qtRectangle.topLeft())
+
+        radius = 20.0
+        path = QtGui.QPainterPath()
+        self.resize(440, 220)
+        path.addRoundedRect(QRectF(self.rect()), radius, radius)
+        mask = QtGui.QRegion(path.toFillPolygon().toPolygon())
+        self.setMask(mask)
 
         self.label_animation = QLabel(self)
         plugin_path = os.path.dirname(tomo3D.__file__)
