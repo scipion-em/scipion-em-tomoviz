@@ -97,7 +97,7 @@ class MrcPlot(object):
             self.points /= 2 ** self.binning  # Binning Scaling
             self.pv_points = pv.PolyData(self.points)
             scalar_colors = np.zeros([self.points.shape[0], 4])
-            cmap = matplotlib.cm.get_cmap('viridis')
+            cmap = matplotlib.cm.get_cmap('gist_rainbow_r')
             unique_ids = np.unique(self.group_ids)
             cmap_ids = np.linspace(0, 1, len(unique_ids))
             for group_id, cmap_id in zip(unique_ids, cmap_ids):
