@@ -425,7 +425,7 @@ class MrcPlot(object):
             # First check if tomogram is already loaded in memory, otherwise load it
             if isinstance(self.tomo, tuple):
                 self.loading_screen.startAnimation()
-                self.loadInMemory(source='tomo')
+                self.loadInMemory(source='tomo', sliceMode=False)
             else:
                 self.showTomogram(load=False)
         else:
@@ -435,8 +435,12 @@ class MrcPlot(object):
 
     def toogleSlice(self, value):
         if value:
-            self.tomo_slice_actor = self.plt.add_mesh_slice(self.pv_tomo_slice, normal='z', cmap="gray", show_scalar_bar=False,
-                                                            outline_translation=False, origin_translation=False)
+            # First check if tomogram is already loaded in memory, otherwise load it
+            if isinstance(self.tomo, tuple):
+                self.loading_screen.startAnimation()
+                self.loadInMemory(source='tomo', sliceMode=True)
+            else:
+                self.showSlices(load=False)
         else:
             self.plt.remove_actor(self.tomo_slice_actor)
             self.plt.clear_plane_widgets()
@@ -507,13 +511,16 @@ class MrcPlot(object):
         if self.save_basename is not None:
             np.savetxt(self.save_basename + '_indices.txt', self.points_ids, delimiter=' ')
 
-    def loadInMemory(self, source):
+    def loadInMemory(self, source, sliceMode=False):
         self.thread = QThread()
         self.worker = Worker(self)
         self.worker.moveToThread(self.thread)
         if source == 'tomo':
             self.thread.started.connect(self.worker.runTomoLoading)
-            self.thread.finished.connect(lambda: self.showTomogram(load=True))
+            if sliceMode:
+                self.thread.finished.connect(lambda: self.showSlices(load=True))
+            else:
+                self.thread.finished.connect(lambda: self.showTomogram(load=True))
         if source == 'mask':
             self.thread.started.connect(self.worker.runMaskLoading)
             self.thread.finished.connect(lambda: self.showMask(load=True))
@@ -532,6 +539,14 @@ class MrcPlot(object):
                                              render_points_as_spheres=True)
                            for actor, op, cid in zip(self.pv_tomo, self.opacities, cmap_ids)]
         self.plt.reset_camera()
+
+    def showSlices(self, load=True):
+        if load:
+            self.tomo, self.pv_tomo, self.opacities, self.pv_tomo_slice = self.worker.output
+            self.loading_screen.stopAnimation()
+        self.tomo_slice_actor = self.plt.add_mesh_slice(self.pv_tomo_slice, normal='z', cmap="gray",
+                                                        show_scalar_bar=False,
+                                                        outline_translation=False, origin_translation=False)
 
     def showMask(self, load=True):
         if load:
