@@ -37,6 +37,6 @@ setup(
     install_requires=[requirements],
     entry_points={'pyworkflow.plugin': 'tomo3D = tomo3D'},
     package_data={  # Optional
-       'tomo3D': ['icon.png', 'protocols.conf'],
+       'tomo3D': ['icon.png', 'logo.svg', 'icon_square.png', 'loading.gif', 'protocols.conf'],
     }
 )

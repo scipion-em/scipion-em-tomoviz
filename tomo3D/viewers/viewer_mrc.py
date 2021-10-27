@@ -26,11 +26,16 @@
 # **************************************************************************
 
 
+import os
 import pyvistaqt as pvqt
 import pyvista as pv
+from PyQt5.QtGui import QMovie
 from pyvista.utilities import generate_plane
 import pymeshfix as pm
 import vtk
+from PyQt5 import QtGui
+from PyQt5.QtWidgets import QWidget, QLabel, QDesktopWidget
+from PyQt5.QtCore import Qt, QObject, QThread, pyqtSignal, QRectF
 
 import numpy as np
 import matplotlib
@@ -45,6 +50,8 @@ import pyworkflow.utils as pwutils
 
 from pwem.emlib.image import ImageHandler
 
+import tomo3D
+
 
 class MrcPlot(object):
     '''
@@ -57,7 +64,7 @@ class MrcPlot(object):
          - normals (Path (Str) - Optional): File containing a Set of Normals (in TEXT format)
          - binning (Float - Optional):  Binning factor to be applied to tomo_mrc and mask_mrc (Very useful to save time)
          - sigma (Float - Optional):  Gaussian Filter width
-         - triangulation (Bool - Optional): Tells if the representation of the Tomomgra is Voxel based on Triangle based
+         - triangulation (Bool - Optional): Tells if the representation of the Tomogram is Voxel based on Triangle based
     Usage:
          import MRCPlot
          plt = MRCPlot(tomo_mrc=tomo_mrc, mask_mrc=mask_mrc, binning=2)
@@ -73,20 +80,16 @@ class MrcPlot(object):
                 self.binning = self.getBinning(mask_mrc)
             else:
                 self.binning = 0
-        self.tomo = self.readMRC(tomo_mrc, order=5, binning=self.binning) if tomo_mrc is not None else None
-        self.mask = self.readMRC(mask_mrc, binning=self.binning) if mask_mrc is not None else None
+        else:
+            self.binning = binning
+        self.tomo = (tomo_mrc, triangulation, sigma)
+        self.mask = mask_mrc
         self.points = np.loadtxt(points, delimiter=' ') if points is not None else None
         self.normals = np.loadtxt(normals, delimiter=' ') if normals is not None else None
-        self.boxSize = boxSize / 2 ** self.binning
+        self.boxSize = boxSize / 2 ** self.binning if boxSize is not None else None
         self.save_basename = pwutils.removeBaseExt(tomo_mrc) if tomo_mrc is not None and points is not None else None
 
         # Get Pyvista Objects
-        if isinstance(self.tomo, np.ndarray):
-            self.pv_tomo_slice = self.gridFromMRC(self.tomo)
-            self.pv_tomo, self.opacities = self.isovolumes(self.tomo, triangulation=triangulation, sigma=sigma)
-        if isinstance(self.mask, np.ndarray):
-            labels = np.unique(self.mask)[1:]
-            self.pv_masks = [self.surfaceFromMRC(self.mask, label=label) for label in labels]
         if isinstance(self.points, np.ndarray):
             self.points_ids = self.points[:, 3]
             self.group_ids = self.points[:, 4]
@@ -94,7 +97,7 @@ class MrcPlot(object):
             self.points /= 2 ** self.binning  # Binning Scaling
             self.pv_points = pv.PolyData(self.points)
             scalar_colors = np.zeros([self.points.shape[0], 4])
-            cmap = matplotlib.cm.get_cmap('viridis')
+            cmap = matplotlib.cm.get_cmap('gist_rainbow_r')
             unique_ids = np.unique(self.group_ids)
             cmap_ids = np.linspace(0, 1, len(unique_ids))
             for group_id, cmap_id in zip(unique_ids, cmap_ids):
@@ -115,12 +118,17 @@ class MrcPlot(object):
         self.normals_actor = None
         self.box_actor = {}
 
+        self.first_reset = True
+
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer')
         self.plt.main_menu.clear()
+        plugin_path = os.path.dirname(tomo3D.__file__)
+        self.plt.app.setWindowIcon(QtGui.QIcon(os.path.join(plugin_path, "icon_square.png")))
+        self.loading_screen = LoadingScreen()
 
         pos = 0.
 
-        if isinstance(self.tomo, np.ndarray):
+        if tomo_mrc is not None:
             pos += 45.
             self.buttonTomo = self.plt.add_checkbox_button_widget(callback=self.plotTomo, position=(pos, 10.))
             self.plt.add_text('Tomogram', position=(pos, 65.), font_size=12)
@@ -264,7 +272,7 @@ class MrcPlot(object):
                     plane_widget.UpdatePlacement()
             self.plt.add_key_event("o", reserOrigin)
 
-        if isinstance(self.mask, np.ndarray):
+        if mask_mrc is not None:
             pos += 170. if pos != 0 else 45.
             self.plt.add_text('Vesicles', position=(pos, 65.), font_size=12)
             self.buttonGraph = self.plt.add_checkbox_button_widget(callback=self.plotMasks, position=(pos, 10.))
@@ -377,8 +385,17 @@ class MrcPlot(object):
         return hist, bin_centers
 
     def contours(self, hist, bin_centers):
-        opacities = 1 - hist[np.where((hist > np.std(hist)) * (hist < np.amax(hist)))]
-        contour_values = bin_centers[np.where((hist > np.std(hist)) * (hist < np.amax(hist)))]
+        logic_slicing = np.where((hist > np.std(hist)) * (hist < np.amax(hist)))
+        sliced_hist = hist[logic_slicing]
+        opacities = 1 - sliced_hist
+        contour_values = bin_centers[logic_slicing]
+        # print(1 - opacities)
+        # print(np.mean(1-opacities))
+        # print(contour_values)
+        logic_slicing_2 = np.where(sliced_hist < np.mean(sliced_hist))
+        contour_values = contour_values[logic_slicing_2]
+        # print(contour_values)
+        opacities = opacities[logic_slicing_2]
         return contour_values, opacities
 
     def isovolumes(self, volume, range=0.01, sigma=None, triangulation=True):
@@ -405,12 +422,12 @@ class MrcPlot(object):
 
     def plotTomo(self, value):
         if value:
-            cmap = matplotlib.cm.get_cmap('bone')  # Bone also looks nice
-            cmap_ids = np.linspace(0, 1, len(self.pv_tomo))
-            self.tomo_actor = [self.plt.add_mesh(actor, show_scalar_bar=False, opacity=op, color=cmap(cid),
-                                                 render_points_as_spheres=True)
-                               for actor, op, cid in zip(self.pv_tomo, self.opacities, cmap_ids)]
-            self.plt.reset_camera()
+            # First check if tomogram is already loaded in memory, otherwise load it
+            if isinstance(self.tomo, tuple):
+                self.loading_screen.startAnimation()
+                self.loadInMemory(source='tomo', sliceMode=False)
+            else:
+                self.showTomogram(load=False)
         else:
             for actor in self.tomo_actor:
                 self.plt.remove_actor(actor)
@@ -418,8 +435,12 @@ class MrcPlot(object):
 
     def toogleSlice(self, value):
         if value:
-            self.tomo_slice_actor = self.plt.add_mesh_slice(self.pv_tomo_slice, normal='z', cmap="gray", show_scalar_bar=False,
-                                                            outline_translation=False, origin_translation=False)
+            # First check if tomogram is already loaded in memory, otherwise load it
+            if isinstance(self.tomo, tuple):
+                self.loading_screen.startAnimation()
+                self.loadInMemory(source='tomo', sliceMode=True)
+            else:
+                self.showSlices(load=False)
         else:
             self.plt.remove_actor(self.tomo_slice_actor)
             self.plt.clear_plane_widgets()
@@ -427,10 +448,12 @@ class MrcPlot(object):
 
     def plotMasks(self, value):
         if value:
-            cmap = matplotlib.cm.get_cmap('Set3')
-            cmap_ids = np.linspace(0, 1, len(self.pv_masks))
-            self.mask_actors = [self.plt.add_mesh(mask, show_scalar_bar=False, color=cmap(cmap_id), smooth_shading=True)
-                                for mask, cmap_id in zip(self.pv_masks, cmap_ids)]
+            # First check if mask is already loaded in memory, otherwise load it
+            if isinstance(self.mask, str):
+                self.loading_screen.startAnimation()
+                self.loadInMemory(source='mask')
+            else:
+                self.showMask(load=False)
         else:
             for actor in self.mask_actors:
                 self.plt.remove_actor(actor)
@@ -438,8 +461,13 @@ class MrcPlot(object):
 
     def plotPoints(self, value):
         if value:
-            self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
-                                                       cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=False))
+            if self.first_reset:
+                self.first_reset = False
+                self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
+                                                           cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=True))
+            else:
+                self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
+                                                           cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=False))
         else:
             for actor in self.points_actor:
                 self.plt.remove_actor(actor)
@@ -460,16 +488,127 @@ class MrcPlot(object):
 
     def plotNormals(self, value):
         if value:
-            self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
-                                                     mag=10, color='red', reset_camera=False)
+            if self.first_reset:
+                self.first_reset = False
+                self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
+                                                         mag=10, color='red', reset_camera=True)
+            else:
+                self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
+                                                         mag=10, color='red', reset_camera=False)
         else:
             self.plt.remove_actor(self.normals_actor)
             self.normals_actor = None
 
     def initializePlot(self):
+        # By default coordinates button is toggled
+        if self.points is not None:
+            self.buttonPoints.GetRepresentation().SetState(True)
+            self.plotPoints(True)
+
         self.plt.app.exec_()
 
         # Save Points and Normals
         if self.save_basename is not None:
             np.savetxt(self.save_basename + '_indices.txt', self.points_ids, delimiter=' ')
 
+    def loadInMemory(self, source, sliceMode=False):
+        self.thread = QThread()
+        self.worker = Worker(self)
+        self.worker.moveToThread(self.thread)
+        if source == 'tomo':
+            self.thread.started.connect(self.worker.runTomoLoading)
+            if sliceMode:
+                self.thread.finished.connect(lambda: self.showSlices(load=True))
+            else:
+                self.thread.finished.connect(lambda: self.showTomogram(load=True))
+        if source == 'mask':
+            self.thread.started.connect(self.worker.runMaskLoading)
+            self.thread.finished.connect(lambda: self.showMask(load=True))
+        self.worker.finished.connect(self.thread.quit)
+        # self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+
+    def showTomogram(self, load=True):
+        if load:
+            self.tomo, self.pv_tomo, self.opacities, self.pv_tomo_slice = self.worker.output
+            self.loading_screen.stopAnimation()
+        cmap = matplotlib.cm.get_cmap('bone')  # Greys also looks nice
+        cmap_ids = np.linspace(0, 1, len(self.pv_tomo))
+        self.tomo_actor = [self.plt.add_mesh(actor, show_scalar_bar=False, opacity=3 * op, color=cmap(cid),
+                                             render_points_as_spheres=True)
+                           for actor, op, cid in zip(self.pv_tomo, self.opacities, cmap_ids)]
+        self.plt.reset_camera()
+
+    def showSlices(self, load=True):
+        if load:
+            self.tomo, self.pv_tomo, self.opacities, self.pv_tomo_slice = self.worker.output
+            self.loading_screen.stopAnimation()
+        self.tomo_slice_actor = self.plt.add_mesh_slice(self.pv_tomo_slice, normal='z', cmap="gray",
+                                                        show_scalar_bar=False,
+                                                        outline_translation=False, origin_translation=False)
+
+    def showMask(self, load=True):
+        if load:
+            self.mask, self.pv_masks = self.worker.output
+            self.loading_screen.stopAnimation()
+        cmap = matplotlib.cm.get_cmap('Set3')
+        cmap_ids = np.linspace(0, 1, len(self.pv_masks))
+        self.mask_actors = [self.plt.add_mesh(mask, show_scalar_bar=False, color=cmap(cmap_id), smooth_shading=True)
+                            for mask, cmap_id in zip(self.pv_masks, cmap_ids)]
+
+
+class LoadingScreen(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(200, 200)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.CustomizeWindowHint)
+        qtRectangle = self.frameGeometry()
+        centerPoint = QDesktopWidget().availableGeometry().center()
+        qtRectangle.moveCenter(centerPoint)
+        self.move(qtRectangle.topLeft())
+
+        radius = 20.0
+        path = QtGui.QPainterPath()
+        self.resize(440, 220)
+        path.addRoundedRect(QRectF(self.rect()), radius, radius)
+        mask = QtGui.QRegion(path.toFillPolygon().toPolygon())
+        self.setMask(mask)
+
+        self.label_animation = QLabel(self)
+        plugin_path = os.path.dirname(tomo3D.__file__)
+        self.movie = QMovie(os.path.join(plugin_path, "loading.gif"))
+        self.label_animation.setMovie(self.movie)
+
+    def startAnimation(self):
+        self.movie.start()
+        self.show()
+
+    def stopAnimation(self):
+        self.movie.stop()
+        self.close()
+
+class Worker(QObject):
+    finished = pyqtSignal()
+
+    def __init__(self, viewer):
+        super().__init__()
+        self.viewer = viewer
+
+    def runTomoLoading(self):
+        triangulation = self.viewer.tomo[1]
+        sigma = self.viewer.tomo[2]
+        tomo = self.viewer.readMRC(self.viewer.tomo[0], order=5, binning=self.viewer.binning)
+        if isinstance(tomo, np.ndarray):
+            pv_tomo_slice = self.viewer.gridFromMRC(tomo)
+            pv_tomo, opacities = self.viewer.isovolumes(tomo, triangulation=triangulation, sigma=sigma)
+        self.output = (tomo, pv_tomo, opacities, pv_tomo_slice)
+        self.finished.emit()
+
+    def runMaskLoading(self):
+        mask = self.viewer.readMRC(self.viewer.mask, binning=self.viewer.binning)
+        if isinstance(mask, np.ndarray):
+            labels = np.unique(mask)[1:]
+            pv_masks = [self.viewer.surfaceFromMRC(mask, label=label) for label in labels]
+        self.output = (mask, pv_masks)
+        self.finished.emit()
