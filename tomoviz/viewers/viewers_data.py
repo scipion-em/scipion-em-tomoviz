@@ -41,7 +41,7 @@ import tomo.objects
 from ..protocols import XmippProtFilterbyNormal
 
 
-class Tomo3DDataViewer(pwviewer.Viewer):
+class TomoVizDataViewer(pwviewer.Viewer):
     """ Wrapper to visualize different type of objects
     using pyvista
     """

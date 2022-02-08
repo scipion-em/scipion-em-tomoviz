@@ -25,4 +25,4 @@
 # *
 # **************************************************************************
 
-from .viewers_data import Tomo3DDataViewer
+from .viewers_data import TomoVizDataViewer

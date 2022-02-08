@@ -29,7 +29,7 @@ import pwem.protocols as emprot
 from pyworkflow.tests import BaseTest, setupTestProject
 
 from . import DataSet
-import tomo3D.protocols
+import tomoviz.protocols
 import tomo.protocols
 
 
@@ -70,7 +70,7 @@ import tomo.protocols
 #     def _runTomoPickingConsensus(self, coordinates, consensus, mode, radius=100):
 #         choices_mode = ['>=', '=']
 #         choices_consensus = {-1: 'AND', 1: 'OR'}
-#         protPickingConsensus = self.newProtocol(tomo3D.protocols.ProtTomoConsensusPicking,
+#         protPickingConsensus = self.newProtocol(tomoviz.protocols.ProtTomoConsensusPicking,
 #                                                 inputCoordinates=coordinates,
 #                                                 consensus=consensus,
 #                                                 mode=mode,
@@ -166,7 +166,7 @@ import tomo.protocols
 #         return getattr(protJoinSets, 'outputSet', None)
 #
 #     def _runTomoPickingRemoveDuplicates(self, coordinates):
-#         protPickingConsensus = self.newProtocol(tomo3D.protocols.ProtTomoPickingRemoveDuplicates,
+#         protPickingConsensus = self.newProtocol(tomoviz.protocols.ProtTomoPickingRemoveDuplicates,
 #                                                 inputCoordinates=coordinates,
 #                                                 objLabel='Remove Duplicates')
 #         self.launchProtocol(protPickingConsensus)

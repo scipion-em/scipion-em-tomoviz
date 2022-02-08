@@ -50,7 +50,7 @@ import pyworkflow.utils as pwutils
 
 from pwem.emlib.image import ImageHandler
 
-import tomo3D
+import tomoviz
 
 
 class MrcPlot(object):
@@ -120,9 +120,9 @@ class MrcPlot(object):
 
         self.first_reset = True
 
-        self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer')
+        self.plt = pvqt.BackgroundPlotter(title='Scipion tomoviz viewer')
         self.plt.main_menu.clear()
-        plugin_path = os.path.dirname(tomo3D.__file__)
+        plugin_path = os.path.dirname(tomoviz.__file__)
         self.plt.app.setWindowIcon(QtGui.QIcon(os.path.join(plugin_path, "icon_square.png")))
         self.loading_screen = LoadingScreen()
 
@@ -576,7 +576,7 @@ class LoadingScreen(QWidget):
         self.setMask(mask)
 
         self.label_animation = QLabel(self)
-        plugin_path = os.path.dirname(tomo3D.__file__)
+        plugin_path = os.path.dirname(tomoviz.__file__)
         self.movie = QMovie(os.path.join(plugin_path, "loading.gif"))
         self.label_animation.setMovie(self.movie)
 
