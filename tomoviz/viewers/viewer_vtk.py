@@ -65,7 +65,7 @@ class VtkPlot(object):
         self.cut_origin = None
         self.cut_normal = None
 
-        self.plt = pvqt.BackgroundPlotter(title='Scipion tomo3D viewer', window_size=(1200, 800))
+        self.plt = pvqt.BackgroundPlotter(title='Scipion tomoviz viewer', window_size=(1200, 800))
         self.plt.main_menu.clear()
 
         pos = 0.
