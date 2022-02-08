@@ -37,6 +37,6 @@ setup(
     install_requires=[requirements],
     entry_points={'pyworkflow.plugin': 'tomoviz = tomoviz'},
     package_data={  # Optional
-       'tomoviz': ['icon.png', 'logo.svg', 'icon_square.png', 'loading.gif', 'protocols.conf'],
+       'tomoviz': ['icon.png', 'icon_square.png', 'loading.gif', 'protocols.conf'],
     }
 )
