@@ -121,6 +121,8 @@ class MrcPlot(object):
 
         self.first_reset = True
 
+        # Theme
+        pv.set_plot_theme("document")
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomoviz viewer')
         self.plt.main_menu.clear()
         plugin_path = os.path.dirname(tomoviz.__file__)

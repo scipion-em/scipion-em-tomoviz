@@ -48,7 +48,9 @@ class TomoVizDataViewer(pwviewer.Viewer):
     _environments = [pwviewer.DESKTOP_TKINTER]
     _targets = [
         tomo.objects.SetOfCoordinates3D,
-        XmippProtFilterbyNormal
+        XmippProtFilterbyNormal,
+        tomo.objects.SetOfTiltSeriesCoordinates,
+        tomo.objects.SetOfSubTomograms
     ]
 
     def __init__(self, **kwargs):
@@ -63,54 +65,75 @@ class TomoVizDataViewer(pwviewer.Viewer):
         views = []
         cls = type(obj)
 
+        itemField = "id"
+
         if issubclass(cls, tomo.objects.SetOfCoordinates3D):
             outputCoords = obj
+            tomos = outputCoords.getPrecedents()
+            groupAttribute = "_volId"
+
+        elif issubclass(cls, tomo.objects.SetOfSubTomograms):
+            outputCoords = obj.getCoordinates3D()
+            tomos = outputCoords.getPrecedents()
+            groupAttribute = "_volId"
+
         elif issubclass(cls, EMProtocol):
             outputCoords = obj.inputMeshes.get()
+            tomos = outputCoords.getPrecedents()
+            groupAttribute = "_volId"
 
-        tomos = outputCoords.getPrecedents()
+        elif issubclass(cls, tomo.objects.SetOfTiltSeriesCoordinates):
+            outputCoords = obj
+            tomos = outputCoords.getTiltSeries()
+            groupAttribute = "_tsId"
+            itemField = groupAttribute
 
-        volIds = outputCoords.aggregate(["MAX", "COUNT"], "_volId", ["_volId"])
-        volIds = [(d['_volId'], d["COUNT"]) for d in volIds]
+        volIds = outputCoords.aggregate(["MAX", "COUNT"], groupAttribute, [groupAttribute])
+        volIds = [(d[groupAttribute], d["COUNT"]) for d in volIds]
 
         tomoList = []
         for objId in volIds:
-            tomogram = tomos[objId[0]].clone()
+            tomogram = tomos[{itemField:objId[0]}].clone()
             tomogram.count = objId[1]
             tomoList.append(tomogram)
                         # tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
         tomoProvider = Tomo3DTreeProvider(tomoList)
-        ViewerMRCDialog(self._tkRoot, outputCoords, provider=tomoProvider)
+        viewer = ViewerMRCDialog(self._tkRoot, outputCoords,
+                                 provider=tomoProvider,
+                                 allowSelect= False,
+                                 cancelButton=True)
 
-        import tkinter as tk
-        frame = tk.Frame()
-        if askYesNo(Message.TITLE_SAVE_OUTPUT, Message.LABEL_SAVE_OUTPUT, frame):
-            protocol = self.protocol
-            suffix = protocol._getOutputSuffix(tomo.objects.SetOfCoordinates3D)
-            updated_set = protocol._createSetOfCoordinates3D(tomos, suffix)
-            updated_set.setName("Selected Coordinates")
-            updated_set.setPrecedents(tomos)
-            updated_set.setSamplingRate(tomos.getSamplingRate())
-            updated_set.setBoxSize(outputCoords.getBoxSize())
-            for item in tomoList:
-                basename = pwutils.removeBaseExt(item.getFileName())
-                indices_file = basename + '_indices.txt'
-                if os.path.isfile(indices_file):
-                    indices = np.loadtxt(indices_file, delimiter=' ')
-                    for index in indices:
-                        updated_set.append(outputCoords[index].clone())
-                    pwutils.cleanPath(indices_file)
-            name = protocol.OUTPUT_PREFIX + suffix
-            args = {}
-            args[name] = updated_set
-            protocol._defineOutputs(**args)
-            protocol._defineSourceRelation(tomos, updated_set)
-            protocol._updateOutputSet(name, updated_set, state=updated_set.STREAM_CLOSED)
-        else:
-            for item in tomoList:
-                basename = pwutils.removeBaseExt(item.getFileName())
-                indices_file = basename + '_indices.txt'
-                if os.path.isfile(indices_file):
-                    pwutils.cleanPath(indices_file)
+        # For now we only generate 3d coordinates
+        if viewer.haveCoordinatesChanged() and isinstance(cls, tomo.objects.SetOfCoordinates3D):
+            import tkinter as tk
+            frame = tk.Frame()
+            if askYesNo(Message.TITLE_SAVE_OUTPUT, Message.LABEL_SAVE_OUTPUT, frame):
+                protocol = self.protocol
+                suffix = protocol._getOutputSuffix(tomo.objects.SetOfCoordinates3D)
+                updated_set = protocol._createSetOfCoordinates3D(tomos, suffix)
+                updated_set.setName("Selected Coordinates")
+                updated_set.setPrecedents(tomos)
+                updated_set.setSamplingRate(tomos.getSamplingRate())
+                updated_set.setBoxSize(outputCoords.getBoxSize())
+                for item in tomoList:
+                    basename = pwutils.removeBaseExt(item.getFileName())
+                    indices_file = basename + '_indices.txt'
+                    if os.path.isfile(indices_file):
+                        indices = np.loadtxt(indices_file, delimiter=' ')
+                        for index in indices:
+                            updated_set.append(outputCoords[index].clone())
+                        pwutils.cleanPath(indices_file)
+                name = protocol.OUTPUT_PREFIX + suffix
+                args = {}
+                args[name] = updated_set
+                protocol._defineOutputs(**args)
+                protocol._defineSourceRelation(tomos, updated_set)
+                protocol._updateOutputSet(name, updated_set, state=updated_set.STREAM_CLOSED)
+            else:
+                for item in tomoList:
+                    basename = item.getTsId()
+                    indices_file = basename + '_indices.txt'
+                    if os.path.isfile(indices_file):
+                        pwutils.cleanPath(indices_file)
 
-        return views
+        # return views
