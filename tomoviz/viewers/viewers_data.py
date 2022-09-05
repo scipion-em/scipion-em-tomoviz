@@ -27,15 +27,14 @@ import os.path
 
 import numpy as np
 import pyworkflow.viewer as pwviewer
-from pyworkflow.object import String
-from pyworkflow.gui.dialog import askYesNo
+from pyworkflow.gui.dialog import askYesNo, showInfo
 from pyworkflow.utils.properties import Message
 import pyworkflow.utils as pwutils
 
 from pwem.protocols import EMProtocol
 import pwem.viewers.views as vi
 from .views_tkinter_tree import Tomo3DTreeProvider
-from .views_tkinter_tree import Tomo3DDialog, ViewerMRCDialog
+from .views_tkinter_tree import ViewerMRCDialog
 
 import tomo.objects
 from ..protocols import XmippProtFilterbyNormal
@@ -74,6 +73,11 @@ class TomoVizDataViewer(pwviewer.Viewer):
 
         elif issubclass(cls, tomo.objects.SetOfSubTomograms):
             outputCoords = obj.getCoordinates3D()
+            if outputCoords is None:
+                showInfo("3D coordinates missing",
+                         "This set of subtomograms is not associated with a set of coordinates 3d and cannot be used in this coordinate viewer.",
+                         parent=self.getParent().root)
+                return []
             tomos = outputCoords.getPrecedents()
             groupAttribute = "_volId"
 
