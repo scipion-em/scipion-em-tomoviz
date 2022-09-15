@@ -88,7 +88,7 @@ class TomoVizDataViewer(pwviewer.Viewer):
 
         elif issubclass(cls, tomo.objects.SetOfTiltSeriesCoordinates):
             outputCoords = obj
-            tomos = outputCoords.getTiltSeries()
+            tomos = outputCoords.getSetOfTiltSeries()
             groupAttribute = "_tsId"
             itemField = groupAttribute
 
