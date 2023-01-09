@@ -25,4 +25,12 @@
 # *
 # **************************************************************************
 
-from .viewers_data import Tomo3DDataViewer
+import pyworkflow.plugin as pwplugin
+
+__version__ = "3.1.0"
+_logo = "icon.png"
+_references = []
+
+
+class Plugin(pwplugin.Plugin):
+    pass

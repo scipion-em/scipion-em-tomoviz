@@ -1,8 +1,8 @@
 scipion-pyworkflow
 scipion-em >= 3.0.8
 scipion-em-tomo
-pyvista
-pyvistaqt
-pymeshfix
+pyvista==0.27.4
+pyvistaqt==0.3.0
+pymeshfix==0.14.1
 scikit-image
 PyQt5

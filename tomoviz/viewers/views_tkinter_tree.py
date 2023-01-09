@@ -43,7 +43,7 @@ class Tomo3DTreeProvider(TreeProvider):
         self.tomoList = tomoList
 
     def getColumns(self):
-        return [('Tomogram', 300)]
+        return [('Tomogram', 300), ("# coords", 100)]
 
     def getObjectInfo(self, tomo):
         tomogramName = pwutils.removeBaseExt(tomo.getFileName())
@@ -51,6 +51,7 @@ class Tomo3DTreeProvider(TreeProvider):
 
         return {'key': tomogramName, 'parent': None,
                 'text': tomogramName,
+                'values':(tomo.count),
                 'tags': ("done")}
 
     def getObjectPreview(self, obj):
@@ -149,9 +150,12 @@ class ViewerMRCDialog(ToolbarListDialog):
                         coord.getY(const.BOTTOM_LEFT_CORNER),
                         coord.getZ(const.BOTTOM_LEFT_CORNER),
                         coord.getObjId()]
+            position.append(coord.getGroupId()) if coord.getGroupId() is not None else position.append(0)
             coord_list.append(position)
             direction_list.append(direction)
+        boxSize = self.coords.getBoxSize()
         np.savetxt('positions.txt', np.asarray(coord_list))
         np.savetxt('directions.txt', np.asarray(direction_list))
-        viewer_args = {'tomo_mrc': tomo_path, 'points': 'positions.txt', 'normals': 'directions.txt'}
+        viewer_args = {'tomo_mrc': tomo_path, 'points': 'positions.txt', 'normals': 'directions.txt',
+                       'boxSize': boxSize}
         guiThread(MrcPlot, 'initializePlot', **viewer_args)

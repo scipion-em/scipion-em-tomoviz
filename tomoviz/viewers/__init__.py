@@ -25,12 +25,4 @@
 # *
 # **************************************************************************
 
-import pwem
-
-__version__ = "3.0.4"
-_logo = "icon.png"
-_references = ['you2019']
-
-
-class Plugin(pwem.Plugin):
-    pass
+from .viewers_data import TomoVizDataViewer
