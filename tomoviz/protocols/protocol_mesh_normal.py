@@ -108,14 +108,16 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                 groupId = meshPoint.getGroupId()
                 key = "%s_%d" % (tomoId, groupId)
                 if key not in meshDict.keys():
-                    meshDict[key] = [meshPoint.getPosition(const.SCIPION)]
+                    meshDict[key] = [[meshPoint.getPosition(const.SCIPION)]]
+                else:
+                    meshDict[key][0].append(meshPoint.getPosition(const.SCIPION))
+            meshPoint.getPosition(const.SCIPION)
 
             for meshKey in meshDict:  # iterate over keys
+                meshPoint.getPosition(const.SCIPION)
                 # write normals in position [1] of the value list for each mesh by passing to _getNormalVesicleList
                 # the coordinates in the mesh, that are in position [0] of the value list
                 meshDict[meshKey][1] = self._getNormalVesicleList(np.asarray(meshDict[meshKey][0]))
-
-        print(meshDict.keys())
 
         # Create corresponding output depending on the input type of object
         if self._getInputisSubtomo(inSet.getFirstItem()):
@@ -242,9 +244,8 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         return tilt
 
     def _filterByNormal(self, item, tol, meshDict):
-        meshfromDict = meshDict[self._getVesicleId(item)]
-        if meshfromDict["tomoName"][0] == path.basename(item.getVolName()):
-            normSubtomo, normVesicle = self._getNormalVesicle(meshfromDict["normals"], item)
-            if abs(normSubtomo[0] - normVesicle[0]) < tol and abs(normSubtomo[1] - normVesicle[1]) < tol and \
-                    abs(normSubtomo[2] - normVesicle[2]) < tol:
-                self.outSet.append(item)
+        meshfromDict = meshDict["%s_%i" % (item.getTomoId(), item.getGroupId())]
+        normSubtomo, normVesicle = self._getNormalVesicle(meshfromDict[1], item)
+        if abs(normSubtomo[0] - normVesicle[0]) < tol and abs(normSubtomo[1] - normVesicle[1]) < tol and \
+                abs(normSubtomo[2] - normVesicle[2]) < tol:
+            self.outSet.append(item)
