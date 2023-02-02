@@ -108,7 +108,7 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                 groupId = meshPoint.getGroupId()
                 key = "%s_%d" % (tomoId, groupId)
                 if key not in meshDict.keys():
-                    meshDict[key] = [[meshPoint.getPosition(const.SCIPION)]]
+                    meshDict[key] = [[meshPoint.getPosition(const.SCIPION)], 0]
                 else:
                     meshDict[key][0].append(meshPoint.getPosition(const.SCIPION))
             meshPoint.getPosition(const.SCIPION)
