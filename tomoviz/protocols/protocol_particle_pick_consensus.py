@@ -116,12 +116,50 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
         self.checkedTomos = set()   # those tomos ready to be processed (tomoId)
         self.processedTomos = set() # those tomos already processed (tomoId)
         self.sampligRates = []
-        coorSteps = self.insertNewCoorsSteps([])
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=coorSteps, wait=True)
+        coorSteps = self._consensusStep()
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=coorSteps)
 
     def createOutputStep(self):
-        pass
+        newFiles = getFiles(self._getTmpPath())
+        outSet = self._loadOutputSet(SetOfCoordinates3D,
+                                     'coordinates.sqlite')
+
+        for fnTmp in newFiles:
+            if '_vIds' in fnTmp or '_trMats' in fnTmp:
+                continue
+            coords = np.loadtxt(fnTmp)
+            vsIds = np.loadtxt(removeExt(fnTmp) + '_vIds.txt')
+            with open(removeExt(fnTmp) + '_trMats.txt') as outFile:
+                shape_mat = outFile.readline()
+                shape_mat = eval('(' + shape_mat.split('(')[1])
+                trMats = np.loadtxt(
+                    removeExt(fnTmp) + '_trMats.txt').reshape(shape_mat)
+            moveFile(fnTmp, self._getExtraPath())
+            moveFile(removeExt(fnTmp) + '_vIds.txt', self._getExtraPath())
+            for idv in np.unique(vsIds):
+                vesicle_coords = coords[np.where(vsIds == idv)]
+                vesicle_tr = trMats[np.where(vsIds == idv)]
+                if vesicle_coords.size == 3:  # special case with only one coordinate
+                    vesicle_coords = [vesicle_coords]
+                for idx, coord in enumerate(vesicle_coords):
+                    newCoord = Coordinate3D()
+                    tomograms = self.getMainInput().getPrecedents()
+                    newCoord.setVolume(tomograms[self.getTomoId(fnTmp)])
+                    newCoord.setPosition(coord[0], coord[1], coord[2],
+                                         const.SCIPION)
+                    newCoord.setGroupId(idv)
+                    matrix = vesicle_tr[idx]
+                    if isinstance(self.inputCoordinates, list):
+                        newCoord.setMatrix(matrix)
+                    else:
+                        newCoord.setMatrix(matrix)
+                    outSet.append(newCoord)
+
+        self._updateOutputSet(self.outputName, outSet, Set.STREAM_CLOSED)
+        self.defineRelations(outSet)
+        outSet.close()
+
 
     def _getFirstJoinStepName(self):
         # This function will be used for streaming, to check which is
@@ -138,107 +176,35 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
 
     def insertNewCoorsSteps(self, tomos):
         deps = []
+        outputStep = self._getFirstJoinStep()
         for tomo in tomos:
-            stepId = self._insertFunctionStep("calculateConsensusStep",
-                                              tomo.getObjId(),
-                                              tomo.getFileName(),
+            stepId = self._insertFunctionStep(self.calculateConsensusStep,
+                                              tomo,
                                               prerequisites=[])
             deps.append(stepId)
+            if outputStep is not None:
+                outputStep.addPrerequisites(*deps)
+            self.updateSteps()
         return deps
 
-    def _stepsCheck(self):
-        self._checkNewInput()
-        self._checkNewOutput()
-
-    def _checkNewInput(self):
-        # If continue from an stopped run, don't repeat what is done
-        if not self.checkedTomos:
-            for fn in getFiles(self._getExtraPath()):
-                fn = removeBaseExt(fn)
-                if fn.startswith(self.FN_PREFIX):
-                    self.checkedTomos.update([self.getTomoId(fn)])
-                    self.processedTomos.update([self.getTomoId(fn)])
-
-        streamClosed = []
+    def _consensusStep(self):
         readyTomos = None
         allTomos = set()
         for coordSet in self.inputCoordinates:
             currentPickTomos, isSetClosed = getReadyTomos(coordSet.get())
-            streamClosed.append(isSetClosed)
             if not readyTomos:  # first time
                 readyTomos = currentPickTomos
             else:  # available mics are those ready for all pickers
                 readyTomos.intersection_update(currentPickTomos)
             allTomos = allTomos.union(currentPickTomos)
-
-        self.streamClosed = all(streamClosed)
-        if self.streamClosed:
-            # for non streaming do all and in the last iteration of streaming do the rest
             newTomoIds = allTomos.difference(self.checkedTomos)
-        else:  # for streaming processing, only go for the ready mics in all pickers
-            newTomoIds = readyTomos.difference(self.checkedTomos)
 
         if newTomoIds:
-            self.checkedTomos.update(newTomoIds)
-
             inTomos = self.getMainInput().getPrecedents()
             newTomos = [inTomos[tomoId].clone() for tomoId in newTomoIds]
-
             fDeps = self.insertNewCoorsSteps(newTomos)
-            outputStep = self._getFirstJoinStep()
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-            self.updateSteps()
 
-    def _checkNewOutput(self):
-        if getattr(self, 'finished', False):
-            return
-        self.finished = self.streamClosed and self.checkedTomos == self.processedTomos
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
-
-        newFiles = getFiles(self._getTmpPath())
-        if newFiles or self.finished:  # when finished to close the output set
-            outSet = self._loadOutputSet(SetOfCoordinates3D, 'coordinates.sqlite')
-
-            for fnTmp in newFiles:
-                if '_vIds' in fnTmp or '_trMats' in fnTmp:
-                    continue
-                coords = np.loadtxt(fnTmp)
-                vsIds = np.loadtxt(removeExt(fnTmp) + '_vIds.txt')
-                with open(removeExt(fnTmp) + '_trMats.txt') as outFile:
-                    shape_mat = outFile.readline()
-                    shape_mat = eval('(' + shape_mat.split('(')[1])
-                    trMats = np.loadtxt(removeExt(fnTmp) + '_trMats.txt').reshape(shape_mat)
-                moveFile(fnTmp, self._getExtraPath())
-                moveFile(removeExt(fnTmp) + '_vIds.txt', self._getExtraPath())
-                for idv in np.unique(vsIds):
-                    vesicle_coords = coords[np.where(vsIds == idv)]
-                    vesicle_tr = trMats[np.where(vsIds == idv)]
-                    if vesicle_coords.size == 3:  # special case with only one coordinate
-                        vesicle_coords = [vesicle_coords]
-                    for idx, coord in enumerate(vesicle_coords):
-                        newCoord = Coordinate3D()
-                        tomograms = self.getMainInput().getPrecedents()
-                        newCoord.setVolume(tomograms[self.getTomoId(fnTmp)])
-                        newCoord.setPosition(coord[0], coord[1], coord[2], const.SCIPION)
-                        newCoord.setGroupId(idv)
-                        matrix = vesicle_tr[idx]
-                        if isinstance(self.inputCoordinates, list):
-                            newCoord.setMatrix(matrix)
-                        else:
-                            newCoord.setMatrix(matrix)
-                        outSet.append(newCoord)
-
-            firstTime = not self.hasAttribute(self.outputName)
-            self._updateOutputSet(self.outputName, outSet, streamMode)
-            if firstTime:
-                self.defineRelations(outSet)
-            outSet.close()
-
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)
+        return fDeps
 
     def defineRelations(self, outputSet):
         for inCorrds in self.inputCoordinates:
@@ -254,9 +220,6 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
-        #inMicsPointer = Pointer(self.getMapper().getParent(
-        #                                    self.getMainInput().getMicrographs()),
-        #                                    extended='outputMicrographs')
         outputSet.setBoxSize(self.getMainInput().getBoxSize())
         outputSet.setSamplingRate(self.getMainInput().getSamplingRate())
         inTomosPointer = Pointer(self.getMainInput().getPrecedents())
@@ -264,9 +227,11 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
 
         return outputSet
 
-    def calculateConsensusStep(self, tomoId, tomoName):
-
-        print("Consensus calculation for Tomogram %d: '%s'"
+    def calculateConsensusStep(self, tomo):
+        tomoId = tomo.getTsId(),
+        volId = tomo.getObjId()
+        tomoName = tomo.getFileName()
+        print("Consensus calculation for Tomogram %s: '%s'"
               % (tomoId, tomoName))
 
         # Take the sampling rates just once
@@ -281,12 +246,12 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
         transformations = []
         for idx, coordinates in enumerate(self.inputCoordinates):
             coordArray = np.asarray([x.getPosition(const.SCIPION) for x in
-                                     coordinates.get().iterCoordinates(tomoId)],
+                                     coordinates.get().iterCoordinates(volId)],
                                      dtype=float)
             vIds = np.asarray([x.getGroupId() for x in
-                               coordinates.get().iterCoordinates(tomoId)])
+                               coordinates.get().iterCoordinates(volId)])
             trMat = np.asarray([x.getMatrix() for x in
-                                coordinates.get().iterCoordinates(tomoId)])
+                                coordinates.get().iterCoordinates(volId)])
             coordArray *= float(self.sampligRates[idx]) / float(self.sampligRates[0])
             coords.append(np.asarray(coordArray, dtype=int))
             vesicles.append(np.asarray(vIds, dtype=int))
@@ -294,10 +259,10 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
 
         consensusWorker(coords, vesicles, transformations, self.consensus.get(),
                         self.consensusRadius.get(),
-                        self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, tomoId)),
+                        self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, volId)),
                         self._getExtraPath('jaccard.txt'), self.mode.get())
 
-        self.processedTomos.update([tomoId])
+        self.processedTomos.update([volId])
 
     def _validate(self):
 
