@@ -71,29 +71,9 @@ class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
 
 #--------------------------- INSERT steps functions ----------------------------
     # --------------------------- INSERT steps functions ---------------------------
-    def _insertAllSteps(self):
-        self._generateRemoveDuplicateSteps()
 
-    def insertNewCoorsSteps(self):
-        for tomoName in self.tomograms:
-            stepId = self._insertFunctionStep(self.removeDuplicatesStep,
-                                              tomoName,
-                                              prerequisites=[])
-            self.updateSteps()
-
-    def _generateRemoveDuplicateSteps(self):
-        readyTomos = getReadyTomos(self.inputCoordinates.get())
-        newTomosIds = readyTomos.difference()
-
-        if newTomosIds:
-            self.tomograms = dict()
-            inTomos = self.getMainInput().getPrecedents()
-            for tomo in inTomos:
-                if tomo.getTsId() in newTomosIds:
-                    self.tomograms[tomo.getTsId()] = tomo.clone()
-
-            self.insertNewCoorsSteps()
-
+    def _processStep(self, tomoName):
+        self.removeDuplicatesStep(tomoName)
 
     def getMainInput(self):
         return self.inputCoordinates.get()
@@ -104,7 +84,6 @@ class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
     def removeDuplicatesStep(self, tomoName):
         tomogram = self.tomograms[tomoName]
         tomoId = tomogram.getTsId(),
-        volId = tomogram.getObjId()
         print("Removing duplicates for tomogram %s: '%s'"
               % (tomoId, tomoName))
 

@@ -114,35 +114,13 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
 #--------------------------- INSERT steps functions ---------------------------
     def _insertAllSteps(self):
         self.sampligRates = []
-        self._generateConsensusSteps()
-
-    def _generateConsensusSteps(self):
-        readyTomos = None
-        allTomos = set()
-        for coordSet in self.inputCoordinates:
-            currentPickTomos = getReadyTomos(coordSet.get())
-            if not readyTomos:  # first time
-                readyTomos = currentPickTomos
-            else:  # available mics are those ready for all pickers
-                readyTomos.intersection_update(currentPickTomos)
-            allTomos = allTomos.union(currentPickTomos)
-
-        newTomoIds = allTomos.difference()
-
-        if newTomoIds:
-            self.tomograms = dict()
-            inTomos = self.getMainInput().getPrecedents()
-            for tomo in inTomos:
-                if tomo.getTsId() in newTomoIds:
-                    self.tomograms[tomo.getTsId()] = tomo.clone()
-
-            self.insertNewCoorsSteps()
-
-    def insertNewCoorsSteps(self):
+        self.tomograms = self.getMainInput().getPrecedentsInvolved()
         for tomoName in self.tomograms:
-            stepId = self._insertFunctionStep(self.calculateConsensusStep,
-                                              tomoName, prerequisites=[])
-            self.updateSteps()
+            self._insertFunctionStep(self._processStep, tomoName,
+                                     prerequisites=[])
+
+    def _processStep(self, tomoName):
+        self.calculateConsensusStep(tomoName)
 
     def defineRelations(self, outputSet):
         for inCorrds in self.inputCoordinates:
@@ -268,7 +246,7 @@ class ProtTomoConsensusPicking(ProtTomoPicking):
     def _methods(self):
         return []
 
-    def getMainInput(self):
+    def getMainInput(self) -> SetOfCoordinates3D:
         return self.inputCoordinates[0].get()
 
     @classmethod
