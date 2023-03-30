@@ -73,7 +73,7 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
                       condition='normalDir',
                       help='Tolerance (in degrees) when comparing between subtomogram/coordinate and mesh normal '
                            'directions.')
-
+        # This code is prepared for future features
         # form.addParam('topBottom', BooleanParam, default=True,
         #               label='Remove subtomograms in the top and bottom of the vesicle',
         #               help='Remove the subtomograms that have been picked from the top and bottom parts because they '
@@ -96,38 +96,43 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         tiltBool = self.tilt.get()
         normalBool = self.normalDir.get()
         inMeshes = self.inputMeshes.get()
+
+        # If filter by normal => create dictionary of input meshes
         if normalBool:
             tol = self.tol.get() * np.pi / 180
-
-            groupIdList = []
-            tomoNameList = []
-            for meshPoint in inMeshes:
+            # Create dictionary of meshes:  key = "tomoId_groupId" (each vesicle of each tomogram)
+            #                               value = [points, normals] (coordinates with origin, normals of the coords)
+            meshDict = {}
+            for meshPoint in inMeshes.iterCoordinates():  # Iterate over points (coordinates) in the input SetOfMeshes
+                tomoId = meshPoint.getTomoId()
                 groupId = meshPoint.getGroupId()
-                if groupId not in groupIdList:
-                    groupIdList.append(groupId)
-                    tomoNameList.append(str(meshPoint.getVolumeName()))
+                key = "%s_%d" % (tomoId, groupId)
+                if key not in meshDict.keys():
+                    meshDict[key] = [[meshPoint.getPosition(const.SCIPION)], 0]
+                else:
+                    meshDict[key][0].append(meshPoint.getPosition(const.SCIPION))
+            meshPoint.getPosition(const.SCIPION)
 
-            meshDict = {key: {'tomoName': [tomoName], 'points': [], 'normals': []}
-                        for key, tomoName in zip(groupIdList, tomoNameList)}
+            for meshKey in meshDict:  # iterate over keys
+                meshPoint.getPosition(const.SCIPION)
+                # write normals in position [1] of the value list for each mesh by passing to _getNormalVesicleList
+                # the coordinates in the mesh, that are in position [0] of the value list
+                meshDict[meshKey][1] = self._getNormalVesicleList(np.asarray(meshDict[meshKey][0]))
 
-            for meshPoint in inMeshes.iterCoordinates():
-                if meshDict[meshPoint.getGroupId()]["tomoName"][0] == meshPoint.getVolumeName():
-                    meshDict[meshPoint.getGroupId()]["points"].append(meshPoint.getPosition(const.SCIPION))
-
-            for i in meshDict:
-                meshDict[i]["normals"] = self._getNormalVesicleList(np.asarray(meshDict[i]["points"]))
-
+        # Create corresponding output depending on the input type of object
         if self._getInputisSubtomo(inSet.getFirstItem()):
             self.outSet = self._createSetOfSubTomograms()
         else:
             self.outSet = self._createSetOfCoordinates3D(inMeshes.getPrecedents())
         self.outSet.copyInfo(inSet)
 
+        # If filter by tilt
         if tiltBool:
             if self._getInputisSubtomo(inSet.getFirstItem()):
                 for item in inSet:
                     tilt = self._getTilt(item)
                     if self.maxtilt.get() > tilt > self.mintilt.get():
+                        # If filter by tilt and normal
                         if normalBool:
                             self._filterByNormal(item, tol, meshDict)
                         else:
@@ -239,9 +244,8 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         return tilt
 
     def _filterByNormal(self, item, tol, meshDict):
-        meshfromDict = meshDict[self._getVesicleId(item)]
-        if meshfromDict["tomoName"][0] == path.basename(item.getVolName()):
-            normSubtomo, normVesicle = self._getNormalVesicle(meshfromDict["normals"], item)
-            if abs(normSubtomo[0] - normVesicle[0]) < tol and abs(normSubtomo[1] - normVesicle[1]) < tol and \
-                    abs(normSubtomo[2] - normVesicle[2]) < tol:
-                self.outSet.append(item)
+        meshfromDict = meshDict["%s_%i" % (item.getTomoId(), item.getGroupId())]
+        normSubtomo, normVesicle = self._getNormalVesicle(meshfromDict[1], item)
+        if abs(normSubtomo[0] - normVesicle[0]) < tol and abs(normSubtomo[1] - normVesicle[1]) < tol and \
+                abs(normSubtomo[2] - normVesicle[2]) < tol:
+            self.outSet.append(item)

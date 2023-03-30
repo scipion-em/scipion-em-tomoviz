@@ -33,12 +33,14 @@ import numpy as np
 
 from pyworkflow import BETA
 import pyworkflow.protocol.params as params
-from pyworkflow.utils import getFiles, removeBaseExt
+from pyworkflow.utils import getFiles, removeBaseExt, moveFile, removeExt
+from pwem.objects import Set
 
 from .protocol_particle_pick_consensus import (ProtTomoConsensusPicking,
                                                consensusWorker, getReadyTomos)
 
 import tomo.constants as const
+from tomo.objects import SetOfCoordinates3D, Coordinate3D
 
 
 class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
@@ -68,40 +70,10 @@ class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
         # form.addParallelSection(threads=4, mpi=0)
 
 #--------------------------- INSERT steps functions ----------------------------
-    def insertNewCoorsSteps(self, tomos):
-        deps = []
-        for tomo in tomos:
-            stepId = self._insertFunctionStep("removeDuplicatesStep",
-                                              tomo.getObjId(),
-                                              tomo.getFileName(),
-                                              prerequisites=[])
-            deps.append(stepId)
-        return deps
+    # --------------------------- INSERT steps functions ---------------------------
 
-    def _checkNewInput(self):
-        # If continue from an stopped run, don't repeat what is done
-        if not self.checkedTomos:
-            for fn in getFiles(self._getExtraPath()):
-                fn = removeBaseExt(fn)
-                if fn.startswith(self.FN_PREFIX):
-                    self.checkedTomos.update([self.getTomoId(fn)])
-                    self.processedTomos.update([self.getTomoId(fn)])
-
-        readyTomos, self.streamClosed = getReadyTomos(self.inputCoordinates.get())
-
-        newTomosIds = readyTomos.difference(self.checkedTomos)
-
-        if newTomosIds:
-            self.checkedTomos.update(newTomosIds)
-
-            inTomos = self.getMainInput().getPrecedents()
-            newTomos = [inTomos[tomoId].clone() for tomoId in newTomosIds]
-
-            fDeps = self.insertNewCoorsSteps(newTomos)
-            outputStep = self._getFirstJoinStep()
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-            self.updateSteps()
+    def _processStep(self, tomoName):
+        self.removeDuplicatesStep(tomoName)
 
     def getMainInput(self):
         return self.inputCoordinates.get()
@@ -109,23 +81,33 @@ class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
     def defineRelations(self, outputSet):
         self._defineTransformRelation(self.getMainInput(), outputSet)
 
-    def removeDuplicatesStep(self, tomoId, tomoName):
-        print("Removing duplicates for tomogram %d: '%s'"
+    def removeDuplicatesStep(self, tomoName):
+        tomogram = self.tomograms[tomoName]
+        tomoId = tomogram.getTsId(),
+        print("Removing duplicates for tomogram %s: '%s'"
               % (tomoId, tomoName))
 
+        coords = []
+        vesicles = []
+        transformations = []
         coordArray = np.asarray([x.getPosition(const.SCIPION) for x in
-                                 self.getMainInput().iterCoordinates(tomoId)],
+                                 self.getMainInput().iterCoordinates(tomogram)],
                                  dtype=int)
         vIds = np.asarray([x.getGroupId() for x in
-                           self.getMainInput().iterCoordinates(tomoId)],
+                           self.getMainInput().iterCoordinates(tomogram)],
                            dtype=int)
         trMat = np.asarray([x.getMatrix() for x in
-                            self.getMainInput().iterCoordinates(tomoId)])
+                            self.getMainInput().iterCoordinates(tomogram)])
 
-        consensusWorker([coordArray], [vIds], [trMat], 1, self.consensusRadius.get(),
-                        self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, tomoId)))
+        coords.append(np.asarray(coordArray, dtype=int))
+        vesicles.append(np.asarray(vIds, dtype=int))
+        transformations.append(trMat)
 
-        self.processedTomos.update([tomoId])
+        fnTmp = self._getTmpPath('%s%s.txt' % (self.FN_PREFIX, tomoName))
+        consensusWorker(coords, vesicles, transformations, 1,
+                                         self.consensusRadius.get(),  fnTmp)
+
+        self.generateOutput(tomogram, fnTmp)
 
     def _validate(self):
         errors = []
