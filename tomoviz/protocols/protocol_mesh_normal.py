@@ -28,32 +28,37 @@
 
 from os import path
 import numpy as np
+
+from pwem.objects import EMSet
 from pyworkflow import BETA
 from pyworkflow.protocol.params import PointerParam, FloatParam, BooleanParam, IntParam
 import pwem.convert.transformations as tfs
 from pwem.protocols import EMProtocol
-from tomo.objects import SubTomogram, Coordinate3D
+from tomo.objects import SetOfCoordinates3D, SubTomogram
 from tomo.protocols import ProtTomoBase
 from tomo.utils import normalFromMatrix
 import tomo.constants as const
 from ..utils import delaunayTriangulation, computeNormals
 
 
-class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
+OUTPUT_NAME = 'outputset'
+class TomovizProtFilterbyNormal(EMProtocol, ProtTomoBase):
     """ This protocol takes surfaces or ROIs (SetOfMeshes) and a SetOfSubtomograms or SetOfCoordinates3D with
     transformation matrix and filters them by different criteria related with the normal direction."""
 
     _label = 'filter by normal'
     _devStatus = BETA
+    _possibleOutputs = {OUTPUT_NAME: EMSet}
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
+        self.outputset = None
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('input', PointerParam, pointerClass="SetOfSubTomograms, SetOfCoordinates3D",
-                      label='Subtomograms/Coordinates', help='SetOfSubtomograms to filter.')
+                      label='Subtomograms/Coordinates', help='Coordinates to filter.')
         form.addParam('inputMeshes', PointerParam, label="Vesicles", pointerClass='SetOfMeshes',
                       help='Select the vesicles in which the subtomograms/coordinates are.')
         form.addParam('tilt', BooleanParam, default=False,
@@ -87,8 +92,7 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('computeNormalStep')
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep(self.computeNormalStep)
 
     # --------------------------- STEPS functions -------------------------------
     def computeNormalStep(self):
@@ -103,60 +107,50 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
             # Create dictionary of meshes:  key = "tomoId_groupId" (each vesicle of each tomogram)
             #                               value = [points, normals] (coordinates with origin, normals of the coords)
             meshDict = {}
+
+            # Get the unique meshes and tomograms
             for meshPoint in inMeshes.iterCoordinates():  # Iterate over points (coordinates) in the input SetOfMeshes
                 tomoId = meshPoint.getTomoId()
                 groupId = meshPoint.getGroupId()
                 key = "%s_%d" % (tomoId, groupId)
                 if key not in meshDict.keys():
+                    self.info("New vesicle (%s) found for tomogram %s" % (groupId, tomoId))
                     meshDict[key] = [[meshPoint.getPosition(const.SCIPION)], 0]
+
                 else:
                     meshDict[key][0].append(meshPoint.getPosition(const.SCIPION))
-            meshPoint.getPosition(const.SCIPION)
+
 
             for meshKey in meshDict:  # iterate over keys
-                meshPoint.getPosition(const.SCIPION)
                 # write normals in position [1] of the value list for each mesh by passing to _getNormalVesicleList
                 # the coordinates in the mesh, that are in position [0] of the value list
                 meshDict[meshKey][1] = self._getNormalVesicleList(np.asarray(meshDict[meshKey][0]))
 
-        # Create corresponding output depending on the input type of object
-        if self._getInputisSubtomo(inSet.getFirstItem()):
-            self.outSet = self._createSetOfSubTomograms()
-        else:
-            self.outSet = self._createSetOfCoordinates3D(inMeshes.getPrecedents())
-        self.outSet.copyInfo(inSet)
+        # Create the set
+        outSet = inSet.create(self.getPath())
+        # Copy set properties
+        outSet.copyInfo(inSet)
 
         # If filter by tilt
         if tiltBool:
-            if self._getInputisSubtomo(inSet.getFirstItem()):
-                for item in inSet:
-                    tilt = self._getTilt(item)
-                    if self.maxtilt.get() > tilt > self.mintilt.get():
-                        # If filter by tilt and normal
-                        if normalBool:
-                            self._filterByNormal(item, tol, meshDict)
-                        else:
-                            self.outSet.append(item)
-            else:
-                for item in inSet.iterCoordinates(volume=None):
-                    tilt = self._getTilt(item)
-                    if self.maxtilt.get() > tilt > self.mintilt.get():
-                        if normalBool:
-                            self._filterByNormal(item, tol, meshDict)
-                        else:
-                            self.outSet.append(item)
+            for item in inSet.iterCoordinates(volume=None):
+                tilt = self._getTilt(item)
+                if self.maxtilt.get() > tilt > self.mintilt.get():
+                    if normalBool:
+                        self._filterByNormal(item, tol, meshDict, outSet)
+                    else:
+                        outSet.append(item)
 
         if normalBool and not tiltBool:
-            if self._getInputisSubtomo(inSet.getFirstItem()):
-                for item in inSet:
-                    self._filterByNormal(item, tol, meshDict)
-            else:
-                for item in inSet.iterCoordinates(volume=None):
-                    self._filterByNormal(item, tol, meshDict)
+            iterator = inSet.iterCoordinates if isinstance(inSet, SetOfCoordinates3D) else inSet.iterSubtomos
+            for item in iterator(volume=None):
+                self._filterByNormal(item, tol, meshDict, outSet)
 
-    def createOutputStep(self):
-        self._defineOutputs(outputset=self.outSet)
-        self._defineSourceRelation(self.input.get(), self.outSet)
+        # Register the set
+        self._defineOutputs(**{OUTPUT_NAME:outSet})
+        self._defineSourceRelation(self.input.get(), outSet)
+    def _isInputASetOfCoordinates(self):
+        return isinstance(self.input.get(), SetOfCoordinates3D)
 
     # --------------------------- INFO functions --------------------------------
     def _validate(self):
@@ -198,17 +192,10 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         return methods
 
     # --------------------------- UTILS functions --------------------------------------------
-    def _getInputisSubtomo(self, item):
-        if isinstance(item, SubTomogram):
-            return True
-        else:
-            return False
-
     def _getVesicleId(self, item):
-        if isinstance(item, SubTomogram):
-            c = item.getCoordinate3D()
-        else:
-            c = item
+
+        c = item
+
         if c.hasGroupId():
             vesicleId = c.getGroupId()
         else:  # For now it works with several vesicles in the same tomo just for input items with groupId
@@ -220,13 +207,9 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         normalsList = computeNormals(triangulation, associateCoords=True)
         return normalsList
 
-    def _getNormalVesicle(self, normalsList, item):
-        if self._getInputisSubtomo(item):
-            normSubtomo = normalFromMatrix(item.getTransform().getMatrix())
-            coord = item.getCoordinate3D()
-        else:
-            normSubtomo = normalFromMatrix(item.getMatrix())
-            coord = item
+    def _getNormalVesicle(self, normalsList, coord):
+
+        normSubtomo = normalFromMatrix(coord.getMatrix())
         coors = np.asarray([coord.getX(const.SCIPION),
                             coord.getY(const.SCIPION),
                             coord.getZ(const.SCIPION)])
@@ -236,16 +219,22 @@ class XmippProtFilterbyNormal(EMProtocol, ProtTomoBase):
         return normSubtomo, normals[idx]
 
     def _getTilt(self, item):
-        if self._getInputisSubtomo(item):
-            _, tilt, _ = tfs.euler_from_matrix(item.getTransform().getMatrix(), axes='szyz')
-        else:
-            _, tilt, _ = tfs.euler_from_matrix(item.getMatrix(), axes='szyz')
+
+        _, tilt, _ = tfs.euler_from_matrix(item.getMatrix(), axes='szyz')
         tilt = -np.rad2deg(tilt)
         return tilt
 
-    def _filterByNormal(self, item, tol, meshDict):
-        meshfromDict = meshDict["%s_%i" % (item.getTomoId(), item.getGroupId())]
-        normSubtomo, normVesicle = self._getNormalVesicle(meshfromDict[1], item)
+    def _filterByNormal(self, item, tol, meshDict,outputSet):
+
+        coord = item.getCoordinate3D() if isinstance(item, SubTomogram) else item
+
+        meshfromDict = meshDict["%s_%i" % (coord.getTomoId(), coord.getGroupId())]
+        normSubtomo, normVesicle = self._getNormalVesicle(meshfromDict[1], coord)
         if abs(normSubtomo[0] - normVesicle[0]) < tol and abs(normSubtomo[1] - normVesicle[1]) < tol and \
                 abs(normSubtomo[2] - normVesicle[2]) < tol:
-            self.outSet.append(item)
+            outputSet.append(item)
+
+class XmippProtFilterbyNormal(TomovizProtFilterbyNormal):
+    @classmethod
+    def isDisabled(cls):
+        return True

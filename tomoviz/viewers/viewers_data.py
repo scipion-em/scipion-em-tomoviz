@@ -64,12 +64,12 @@ class TomoVizDataViewer(pwviewer.Viewer):
         views = []
         cls = type(obj)
 
-        itemField = "id"
+        itemField = tomo.objects.Tomogram.TS_ID_FIELD
 
         if issubclass(cls, tomo.objects.SetOfCoordinates3D):
             outputCoords = obj
             tomos = outputCoords.getPrecedents()
-            groupAttribute = "_volId"
+            groupAttribute = tomo.objects.Coordinate3D.TOMO_ID_ATTR
 
         elif issubclass(cls, tomo.objects.SetOfSubTomograms):
             outputCoords = obj.getCoordinates3D()
@@ -79,7 +79,10 @@ class TomoVizDataViewer(pwviewer.Viewer):
                          parent=self.getParent().root)
                 return []
             tomos = outputCoords.getPrecedents()
-            groupAttribute = "_volId"
+
+            # Keep subtomos as the main collection, since Subtomograms subsets do not affect the coordinates set
+            outputCoords = obj
+            groupAttribute = tomo.objects.SubTomogram.VOL_NAME_FIELD
 
         elif issubclass(cls, EMProtocol):
             outputCoords = obj.inputMeshes.get()
@@ -102,7 +105,7 @@ class TomoVizDataViewer(pwviewer.Viewer):
             tomoList.append(tomogram)
                         # tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
         tomoProvider = Tomo3DTreeProvider(tomoList)
-        viewer = ViewerMRCDialog(self._tkRoot, outputCoords,
+        viewer = ViewerMRCDialog(self._tkRoot, outputCoords, self.protocol,
                                  provider=tomoProvider,
                                  allowSelect= False,
                                  cancelButton=True)
@@ -140,4 +143,5 @@ class TomoVizDataViewer(pwviewer.Viewer):
                     if os.path.isfile(indices_file):
                         pwutils.cleanPath(indices_file)
 
-        # return views
+        # TODO: This should return a list of views and not already launching the dialog.
+        return []

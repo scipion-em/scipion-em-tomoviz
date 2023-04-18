@@ -24,10 +24,12 @@
 # *
 # **************************************************************************
 import numpy as np
+
+from pyworkflow.protocol import Protocol
 from pyworkflow import utils as pwutils
 from pyworkflow.gui.dialog import ToolbarListDialog
 from pyworkflow.gui.tree import TreeProvider
-from tomo.objects import SetOfCoordinates3D
+from tomo.objects import SetOfTiltSeriesCoordinates
 
 from .viewer_triangulations import TriangulationPlot, guiThread
 from .viewer_mrc import MrcPlot
@@ -132,8 +134,9 @@ class ViewerMRCDialog(ToolbarListDialog):
     a pyvista viewer subprocess from a list of Tomograms.
     """
 
-    def __init__(self, parent, coords, **kwargs):
+    def __init__(self, parent, coords, protocol:Protocol, **kwargs):
         self.coords = coords
+        self.prot = protocol
         self.provider = kwargs.get("provider", None)
         ToolbarListDialog.__init__(self, parent,
                                    "Tomogram list",
@@ -170,14 +173,16 @@ class ViewerMRCDialog(ToolbarListDialog):
                 coord_list.append(position)
                 direction_list.append(direction)
 
-        if isinstance(self.coords, SetOfCoordinates3D):
+        if not isinstance(self.coords, SetOfTiltSeriesCoordinates):
             fromCoordinated3D()
         else:
             fromTiltSeriesCoordinates()
 
-        np.savetxt('positions.txt', np.asarray(coord_list))
-        np.savetxt('directions.txt', np.asarray(direction_list))
-        viewer_args = {'tomo_mrc': tomo_path, 'points': 'positions.txt', 'normals': 'directions.txt',
+        posFile = self.prot.getPath('positions.txt')
+        directionsFile= self.prot.getPath('directions.txt')
+        np.savetxt(posFile, np.asarray(coord_list))
+        np.savetxt(directionsFile, np.asarray(direction_list))
+        viewer_args = {'tomo_mrc': tomo_path, 'points': posFile, 'normals': directionsFile,
                        'boxSize': boxSize}
 
         guiThread(MrcPlot, 'initializePlot', **viewer_args)

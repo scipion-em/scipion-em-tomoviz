@@ -52,6 +52,8 @@ from pwem.emlib.image import ImageHandler
 
 import tomoviz
 
+COLOR_MAP = 'gist_rainbow_r' #'terrain'
+
 
 class MrcPlot(object):
     '''
@@ -97,13 +99,11 @@ class MrcPlot(object):
             self.points = np.column_stack([self.points[:, 1], self.points[:, 0], self.points[:, 2]])
             self.points /= 2 ** self.binning  # Binning Scaling
             self.pv_points = pv.PolyData(self.points)
-            scalar_colors = np.zeros([self.points.shape[0], 4])
-            cmap = matplotlib.cm.get_cmap('gist_rainbow_r')
+            scalar_colors = np.zeros([self.points.shape[0]])
             unique_ids = np.unique(self.group_ids)
-            cmap_ids = np.linspace(0, 1, len(unique_ids))
-            for group_id, cmap_id in zip(unique_ids, cmap_ids):
+            for group_id in unique_ids:
                 idp = np.where(self.group_ids == group_id)
-                scalar_colors[idp] = cmap(cmap_id)
+                scalar_colors[idp] = group_id
             self.pv_points["colors"] = scalar_colors
         if isinstance(self.normals, np.ndarray):
             self.normals = np.column_stack([self.normals[:, 1], self.normals[:, 0], self.normals[:, 2]])
@@ -122,7 +122,12 @@ class MrcPlot(object):
         self.first_reset = True
 
         # Theme
-        pv.set_plot_theme("document")
+        from pyvista.themes import DocumentTheme
+        customTheme = DocumentTheme()
+        customTheme.cmap = COLOR_MAP
+        customTheme.color_cycler = 'default'
+        pv.set_plot_theme(customTheme)
+
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomoviz viewer')
         self.plt.main_menu.clear()
         plugin_path = os.path.dirname(tomoviz.__file__)
@@ -320,7 +325,7 @@ class MrcPlot(object):
             self.buttonNormals = self.plt.add_checkbox_button_widget(callback=self.plotNormals, position=(pos, 10.))
 
     def getBinning(self, file):
-        dim = ImageHandler().read(file + ':mrc').getDimensions()
+        dim = ImageHandler().read(file).getDimensions()
         return int(np.floor(max(dim) / 400))
 
     def readMRC(self, file, binning=1, order=0, swapaxes=True):
@@ -479,13 +484,13 @@ class MrcPlot(object):
 
     def plotPoints(self, value):
         if value:
+            reset_camera = False
             if self.first_reset:
                 self.first_reset = False
-                self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
-                                                           cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=True))
-            else:
-                self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
-                                                           cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=False))
+                reset_camera=True
+
+            self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors", categories=True,
+                                           render_points_as_spheres=True, reset_camera=reset_camera))
         else:
             for actor in self.points_actor:
                 self.plt.remove_actor(actor)
@@ -506,13 +511,13 @@ class MrcPlot(object):
 
     def plotNormals(self, value):
         if value:
+            reset_camera = False
             if self.first_reset:
                 self.first_reset = False
-                self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
-                                                         mag=10, color='red', reset_camera=True)
-            else:
-                self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
-                                                         mag=10, color='red', reset_camera=False)
+                reset_camera = True
+
+            self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
+                                                         mag=5, color='red', reset_camera=reset_camera)
         else:
             self.plt.remove_actor(self.normals_actor)
             self.normals_actor = None
