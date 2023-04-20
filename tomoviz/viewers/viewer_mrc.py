@@ -52,6 +52,8 @@ from pwem.emlib.image import ImageHandler
 
 import tomoviz
 
+COLOR_MAP = 'gist_rainbow_r' #'terrain'
+
 
 class MrcPlot(object):
     '''
@@ -72,7 +74,7 @@ class MrcPlot(object):
     '''
 
     def __init__(self, tomo_mrc=None, mask_mrc=None, points=None, boxSize=None, normals=None,
-                 binning=None, sigma=1., triangulation=False):
+                 binning=None, sigma=1., triangulation=False, discrete=False):
         if binning is None:
             if tomo_mrc is not None:
                 self.binning = self.getBinning(tomo_mrc)
@@ -88,6 +90,7 @@ class MrcPlot(object):
         self.normals = np.loadtxt(normals, delimiter=' ') if normals is not None else None
         self.boxSize = boxSize / 2 ** self.binning if boxSize is not None else None
         self.save_basename = pwutils.removeBaseExt(tomo_mrc) if tomo_mrc is not None and points is not None else None
+        self.discrete = discrete
 
         # Get Pyvista Objects
         if isinstance(self.points, np.ndarray):
@@ -96,13 +99,11 @@ class MrcPlot(object):
             self.points = np.column_stack([self.points[:, 1], self.points[:, 0], self.points[:, 2]])
             self.points /= 2 ** self.binning  # Binning Scaling
             self.pv_points = pv.PolyData(self.points)
-            scalar_colors = np.zeros([self.points.shape[0], 4])
-            cmap = matplotlib.cm.get_cmap('gist_rainbow_r')
+            scalar_colors = np.zeros([self.points.shape[0]])
             unique_ids = np.unique(self.group_ids)
-            cmap_ids = np.linspace(0, 1, len(unique_ids))
-            for group_id, cmap_id in zip(unique_ids, cmap_ids):
+            for group_id in unique_ids:
                 idp = np.where(self.group_ids == group_id)
-                scalar_colors[idp] = cmap(cmap_id)
+                scalar_colors[idp] = group_id
             self.pv_points["colors"] = scalar_colors
         if isinstance(self.normals, np.ndarray):
             self.normals = np.column_stack([self.normals[:, 1], self.normals[:, 0], self.normals[:, 2]])
@@ -119,6 +120,13 @@ class MrcPlot(object):
         self.box_actor = {}
 
         self.first_reset = True
+
+        # Theme
+        from pyvista.themes import DocumentTheme
+        customTheme = DocumentTheme()
+        customTheme.cmap = COLOR_MAP
+        customTheme.color_cycler = 'default'
+        pv.set_plot_theme(customTheme)
 
         self.plt = pvqt.BackgroundPlotter(title='Scipion tomoviz viewer')
         self.plt.main_menu.clear()
@@ -317,7 +325,7 @@ class MrcPlot(object):
             self.buttonNormals = self.plt.add_checkbox_button_widget(callback=self.plotNormals, position=(pos, 10.))
 
     def getBinning(self, file):
-        dim = ImageHandler().read(file + ':mrc').getDimensions()
+        dim = ImageHandler().read(file).getDimensions()
         return int(np.floor(max(dim) / 400))
 
     def readMRC(self, file, binning=1, order=0, swapaxes=True):
@@ -344,15 +352,19 @@ class MrcPlot(object):
 
         return grid
 
-    def surfaceFromMRC(self, data, label=1):
+    def surfaceFromMRC(self, data, binarize=True, label=1):
         '''Function to convert an MRC file into an Structure Surface in VTK'''
 
         # Get Only mesh corresponding to a given label (smooth the result to fill holes in the mask)
-        data = data == label
-        data = binary_erosion(binary_dilation(data, selem=ball(4)), selem=ball(1))
+        if binarize:
+            data = data == label
+            data = binary_erosion(binary_dilation(data, selem=ball(4)), selem=ball(1))
 
-        # Triangulate coordinates using marching cubes algorithm
-        grid = self.marchingCubes(data)
+            # Triangulate coordinates using marching cubes algorithm
+            grid = self.marchingCubes(data)
+
+        else:
+            grid = self.marchingCubes(data, level=label)
 
         # Fix the mesh
         mfix = pm._meshfix.PyTMesh(False)
@@ -385,25 +397,36 @@ class MrcPlot(object):
         return hist, bin_centers
 
     def contours(self, hist, bin_centers):
-        logic_slicing = np.where((hist > np.std(hist)) * (hist < np.amax(hist)))
-        sliced_hist = hist[logic_slicing]
-        opacities = 1 - sliced_hist
-        contour_values = bin_centers[logic_slicing]
-        # print(1 - opacities)
-        # print(np.mean(1-opacities))
-        # print(contour_values)
-        logic_slicing_2 = np.where(sliced_hist < np.mean(sliced_hist))
-        contour_values = contour_values[logic_slicing_2]
-        # print(contour_values)
-        opacities = opacities[logic_slicing_2]
+        if self.discrete:
+            logic_slicing = np.where(hist != 0)
+            sliced_hist = hist[logic_slicing]
+            logic_slicing_2 = np.where(sliced_hist != 0)
+            contour_values = bin_centers[logic_slicing]
+            contour_values = contour_values[logic_slicing_2]
+            opacities = np.ones(contour_values.shape) * 0.3
+        else:
+            logic_slicing = np.where((hist > np.std(hist)) * (hist < np.amax(hist)))
+            sliced_hist = hist[logic_slicing]
+            logic_slicing_2 = np.where(sliced_hist < np.mean(sliced_hist))
+            opacities = 1 - sliced_hist
+            contour_values = bin_centers[logic_slicing]
+            # print(1 - opacities)
+            # print(np.mean(1-opacities))
+            # print(contour_values)
+            contour_values = contour_values[logic_slicing_2]
+            # print(contour_values)
+            opacities = opacities[logic_slicing_2]
         return contour_values, opacities
 
     def isovolumes(self, volume, range=0.01, sigma=None, triangulation=True):
         volume = volume if sigma is None else gaussian_filter(volume, sigma=sigma)
         hist, bin_centers = self.histogram(volume)
         contour_values, opacities = self.contours(hist, bin_centers)
-        opacities = (range / (np.amax(opacities) - np.amin(opacities))) * (opacities - np.amin(opacities))
-        return [self.marchingCubes(volume, level, triangulation) for level in contour_values], opacities
+        if not self.discrete:
+            opacities = (range / (np.amax(opacities) - np.amin(opacities))) * (opacities - np.amin(opacities))
+            return [self.marchingCubes(volume, level, triangulation) for level in contour_values], opacities
+        else:
+            return [self.surfaceFromMRC(volume, binarize=False, label=level) for level in contour_values], opacities
 
     def downsamplingPC(self, coords, voxel_size):
         non_empty_voxel_keys, inverse, nb_pts_per_voxel = np.unique(((coords - np.min(coords, axis=0))
@@ -461,13 +484,13 @@ class MrcPlot(object):
 
     def plotPoints(self, value):
         if value:
+            reset_camera = False
             if self.first_reset:
                 self.first_reset = False
-                self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
-                                                           cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=True))
-            else:
-                self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors",
-                                                           cmap="gist_rainbow_r", render_points_as_spheres=True, reset_camera=False))
+                reset_camera=True
+
+            self.points_actor.append(self.plt.add_mesh(self.pv_points, show_scalar_bar=False, scalars="colors", categories=True,
+                                           render_points_as_spheres=True, reset_camera=reset_camera))
         else:
             for actor in self.points_actor:
                 self.plt.remove_actor(actor)
@@ -488,13 +511,13 @@ class MrcPlot(object):
 
     def plotNormals(self, value):
         if value:
+            reset_camera = False
             if self.first_reset:
                 self.first_reset = False
-                self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
-                                                         mag=10, color='red', reset_camera=True)
-            else:
-                self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
-                                                         mag=10, color='red', reset_camera=False)
+                reset_camera = True
+
+            self.normals_actor = self.plt.add_arrows(self.pv_points.cell_centers().points, self.pv_normals,
+                                                         mag=5, color='red', reset_camera=reset_camera)
         else:
             self.plt.remove_actor(self.normals_actor)
             self.normals_actor = None
@@ -533,12 +556,22 @@ class MrcPlot(object):
         if load:
             self.tomo, self.pv_tomo, self.opacities, self.pv_tomo_slice = self.worker.output
             self.loading_screen.stopAnimation()
-        cmap = matplotlib.cm.get_cmap('bone')  # Greys also looks nice
-        cmap_ids = np.linspace(0, 1, len(self.pv_tomo))
-        self.tomo_actor = [self.plt.add_mesh(actor, show_scalar_bar=False, opacity=3 * op, color=cmap(cid),
-                                             render_points_as_spheres=True)
-                           for actor, op, cid in zip(self.pv_tomo, self.opacities, cmap_ids)]
-        self.plt.reset_camera()
+        if self.pv_tomo:
+            if self.discrete:
+                cmap = matplotlib.cm.get_cmap('Set3')
+                cmap_ids = np.linspace(0, 1, len(self.pv_tomo))
+                self.tomo_actor = [self.plt.add_mesh(actor, show_scalar_bar=False, opacity=op, color=cmap(cid),
+                                                     render_points_as_spheres=True)
+                                   for actor, op, cid in zip(self.pv_tomo, self.opacities, cmap_ids)]
+            else:
+                cmap = matplotlib.cm.get_cmap('bone')  # Greys also looks nice
+                cmap_ids = np.linspace(0, 1, len(self.pv_tomo))
+                self.tomo_actor = [self.plt.add_mesh(actor, show_scalar_bar=False, opacity=3 * op, color=cmap(cid),
+                                                     render_points_as_spheres=True)
+                                   for actor, op, cid in zip(self.pv_tomo, self.opacities, cmap_ids)]
+            self.plt.reset_camera()
+        else:
+            self.buttonTomo.GetRepresentation().SetState(False)
 
     def showSlices(self, load=True):
         if load:
@@ -601,7 +634,12 @@ class Worker(QObject):
         tomo = self.viewer.readMRC(self.viewer.tomo[0], order=5, binning=self.viewer.binning)
         if isinstance(tomo, np.ndarray):
             pv_tomo_slice = self.viewer.gridFromMRC(tomo)
-            pv_tomo, opacities = self.viewer.isovolumes(tomo, triangulation=triangulation, sigma=sigma)
+            try:
+                pv_tomo, opacities = self.viewer.isovolumes(tomo, triangulation=triangulation, sigma=sigma)
+            except:
+                print("3D Tomogram view could not be computed, only slice mode will be available")
+                pv_tomo = None
+                opacities = None
         self.output = (tomo, pv_tomo, opacities, pv_tomo_slice)
         self.finished.emit()
 
