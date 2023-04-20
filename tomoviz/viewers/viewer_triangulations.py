@@ -24,7 +24,8 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import logging
+logger = logging.getLogger(__name__)
 import pyvista as pv
 import numpy as np
 from scipy.spatial.distance import pdist
@@ -191,8 +192,8 @@ def instantiateClass(classObj, methodName, *args, **kwargs):
     try:
         instance = classObj(**kwargs)
         runMethod(instance, methodName, *args)
-    except:
-        print('Cannot create instance of class')
+    except Exception as e:
+        logger.info('Cannot create instance of class %s' % classObj, exc_info=e)
     
 def runMethod(instance, methodName, *args):
     '''
@@ -204,5 +205,5 @@ def runMethod(instance, methodName, *args):
     try:
         method = getattr(instance, methodName)
         method(*args)
-    except AttributeError:
-        print(methodName + ' is not a member the class')
+    except AttributeError as e:
+        logger.error(methodName + ' is not a member the class', exc_info=e)

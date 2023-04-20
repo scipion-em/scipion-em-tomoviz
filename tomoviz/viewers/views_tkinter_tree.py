@@ -24,9 +24,12 @@
 # *
 # **************************************************************************
 import numpy as np
+
+from pyworkflow.protocol import Protocol
 from pyworkflow import utils as pwutils
 from pyworkflow.gui.dialog import ToolbarListDialog
 from pyworkflow.gui.tree import TreeProvider
+from tomo.objects import SetOfTiltSeriesCoordinates
 
 from .viewer_triangulations import TriangulationPlot, guiThread
 from .viewer_mrc import MrcPlot
@@ -36,18 +39,18 @@ from tomo.utils import extractVesicles, initDictVesicles, normalFromMatrix
 import tomo.constants as const
 
 class Tomo3DTreeProvider(TreeProvider):
-    """ Populate Tree from SetOfTomograms. """
+    """ Populate Tree from SetOfTomograms or SetOfTiltSeries"""
 
     def __init__(self, tomoList):
         TreeProvider.__init__(self)
         self.tomoList = tomoList
 
     def getColumns(self):
-        return [('Tomogram', 300), ("# coords", 100)]
+        return [('Item', 300), ("# coords", 100)]
 
     def getObjectInfo(self, tomo):
-        tomogramName = pwutils.removeBaseExt(tomo.getFileName())
-        # tomogramName = pwutils.removeBaseExt(tomo.get())
+
+        tomogramName = tomo.getTsId()
 
         return {'key': tomogramName, 'parent': None,
                 'text': tomogramName,
@@ -131,11 +134,12 @@ class ViewerMRCDialog(ToolbarListDialog):
     a pyvista viewer subprocess from a list of Tomograms.
     """
 
-    def __init__(self, parent, coords, **kwargs):
+    def __init__(self, parent, coords, protocol:Protocol, **kwargs):
         self.coords = coords
+        self.prot = protocol
         self.provider = kwargs.get("provider", None)
         ToolbarListDialog.__init__(self, parent,
-                                   "Tomogram List",
+                                   "Tomogram list",
                                    allowsEmptySelection=False,
                                    itemDoubleClick=self.doubleClickOnTomogram,
                                    **kwargs)
@@ -144,18 +148,45 @@ class ViewerMRCDialog(ToolbarListDialog):
         tomo_path = tomo.getFileName()
         coord_list = []
         direction_list = []
-        for coord in self.coords.iterCoordinates(volume=tomo):
-            direction = normalFromMatrix(coord.getMatrix())
-            position = [coord.getX(const.BOTTOM_LEFT_CORNER),
-                        coord.getY(const.BOTTOM_LEFT_CORNER),
-                        coord.getZ(const.BOTTOM_LEFT_CORNER),
-                        coord.getObjId()]
-            position.append(coord.getGroupId()) if coord.getGroupId() is not None else position.append(0)
-            coord_list.append(position)
-            direction_list.append(direction)
-        boxSize = self.coords.getBoxSize()
-        np.savetxt('positions.txt', np.asarray(coord_list))
-        np.savetxt('directions.txt', np.asarray(direction_list))
-        viewer_args = {'tomo_mrc': tomo_path, 'points': 'positions.txt', 'normals': 'directions.txt',
+        boxSize = 32
+
+        def fromCoordinated3D():
+            for coord in self.coords.iterCoordinates(volume=tomo):
+                direction = normalFromMatrix(coord.getMatrix())
+                position = [coord.getX(const.BOTTOM_LEFT_CORNER),
+                            coord.getY(const.BOTTOM_LEFT_CORNER),
+                            coord.getZ(const.BOTTOM_LEFT_CORNER),
+                            coord.getObjId()]
+                position.append(coord.getGroupId()) if coord.getGroupId() is not None else position.append(0)
+                coord_list.append(position)
+                direction_list.append(direction)
+            boxSize = self.coords.getBoxSize()
+
+        def fromTiltSeriesCoordinates():
+            for coord in self.coords.iterItems(where="_tsId='%s'" % tomo.getTsId()):
+                direction = normalFromMatrix(np.eye(4))
+                position = [coord.getX(),
+                            coord.getY(),
+                            coord.getZ(),
+                            coord.getObjId(),
+                            0] # Group Id
+                coord_list.append(position)
+                direction_list.append(direction)
+
+        if not isinstance(self.coords, SetOfTiltSeriesCoordinates):
+            fromCoordinated3D()
+        else:
+            fromTiltSeriesCoordinates()
+
+        posFile = self.prot.getPath('positions.txt')
+        directionsFile= self.prot.getPath('directions.txt')
+        np.savetxt(posFile, np.asarray(coord_list))
+        np.savetxt(directionsFile, np.asarray(direction_list))
+        viewer_args = {'tomo_mrc': tomo_path, 'points': posFile, 'normals': directionsFile,
                        'boxSize': boxSize}
+
         guiThread(MrcPlot, 'initializePlot', **viewer_args)
+
+    def haveCoordinatesChanged(self):
+        # TODO: Add logic to check if coordinates have changed (removed)
+        return False
