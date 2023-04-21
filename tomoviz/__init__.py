@@ -27,7 +27,7 @@
 
 import pyworkflow.plugin as pwplugin
 
-__version__ = "3.1.2"
+__version__ = "3.1.3"
 _logo = "icon.png"
 _references = []
 
