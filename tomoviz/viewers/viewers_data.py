@@ -146,12 +146,6 @@ class TomoVizDataViewer(pwviewer.Viewer):
                 protocol._defineOutputs(**args)
                 protocol._defineSourceRelation(tomos, updated_set)
                 protocol._updateOutputSet(name, updated_set, state=updated_set.STREAM_CLOSED)
-            else:
-                for item in tomoList:
-                    basename = item.getTsId()
-                    indices_file = basename + '_indices.txt'
-                    if os.path.isfile(indices_file):
-                        pwutils.cleanPath(indices_file)
 
         # TODO: This should return a list of views and not already launching the dialog.
         return []
