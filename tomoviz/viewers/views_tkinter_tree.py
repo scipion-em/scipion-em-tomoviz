@@ -24,7 +24,8 @@
 # *
 # **************************************************************************
 import numpy as np
-
+import time
+import os
 from pyworkflow.protocol import Protocol
 from pyworkflow import utils as pwutils
 from pyworkflow.gui.dialog import ToolbarListDialog
@@ -187,6 +188,13 @@ class ViewerMRCDialog(ToolbarListDialog):
 
         guiThread(MrcPlot, 'initializePlot', **viewer_args)
 
-    def haveCoordinatesChanged(self):
-        # TODO: Add logic to check if coordinates have changed (removed)
-        return False
+    def haveCoordinatesChanged(self, coordinateFiles):
+        hasChanged = False
+        if len(coordinateFiles):
+            for coordFile, oldCreationTime in coordinateFiles.items():
+                if os.path.isfile(coordFile):
+                    newCreationTime = time.ctime(os.path.getctime(coordFile))
+                    if newCreationTime != oldCreationTime:
+                        hasChanged = True
+                        break
+        return hasChanged

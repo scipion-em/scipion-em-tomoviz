@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 import os.path
-
+import time
 import numpy as np
 import pyworkflow.viewer as pwviewer
 from pyworkflow.gui.dialog import askYesNo, showInfo
@@ -99,11 +99,21 @@ class TomoVizDataViewer(pwviewer.Viewer):
         volIds = [(d[groupAttribute], d["COUNT"]) for d in volIds]
 
         tomoList = []
+        coordinateFiles = dict()
+
         for objId in volIds:
             tomogram = tomos[{itemField:objId[0]}].clone()
             tomogram.count = objId[1]
             tomoList.append(tomogram)
-                        # tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
+            # Check if _indices.txt files exists for the tomogram and get the
+            # creation time
+            basename = pwutils.removeBaseExt(tomogram.getFileName())
+            indices_file = basename + '_indices.txt'
+            if os.path.isfile(indices_file):
+                coordinateFiles[indices_file] = time.ctime(
+                    os.path.getctime(indices_file))
+
+                # tomoList = [String(tomos[objId].getFileName()) for objId in volIds]
         tomoProvider = Tomo3DTreeProvider(tomoList)
         viewer = ViewerMRCDialog(self._tkRoot, outputCoords, self.protocol,
                                  provider=tomoProvider,
@@ -111,7 +121,7 @@ class TomoVizDataViewer(pwviewer.Viewer):
                                  cancelButton=True)
 
         # For now we only generate 3d coordinates
-        if viewer.haveCoordinatesChanged() and isinstance(cls, tomo.objects.SetOfCoordinates3D):
+        if viewer.haveCoordinatesChanged(coordinateFiles) and issubclass(cls, tomo.objects.SetOfCoordinates3D):
             import tkinter as tk
             frame = tk.Frame()
             if askYesNo(Message.TITLE_SAVE_OUTPUT, Message.LABEL_SAVE_OUTPUT, frame):
