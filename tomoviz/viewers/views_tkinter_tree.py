@@ -91,6 +91,8 @@ class Tomo3DDialog(ToolbarListDialog):
                                    "Tomogram List",
                                    allowsEmptySelection=False,
                                    itemDoubleClick=self.doubleClickOnTomogram,
+                                   lockGui=False,
+                                   cancelButton=True,
                                    **kwargs)
 
     def doubleClickOnTomogram(self, e=None):
@@ -143,6 +145,8 @@ class ViewerMRCDialog(ToolbarListDialog):
                                    "Tomogram list",
                                    allowsEmptySelection=False,
                                    itemDoubleClick=self.doubleClickOnTomogram,
+                                   lockGui=False,
+                                   cancelButton=True,
                                    **kwargs)
 
     def doubleClickOnTomogram(self, tomo=None):
