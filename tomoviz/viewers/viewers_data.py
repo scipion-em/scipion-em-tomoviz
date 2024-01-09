@@ -51,6 +51,7 @@ class TomoVizDataViewer(pwviewer.Viewer):
         tomo.objects.SetOfTiltSeriesCoordinates,
         tomo.objects.SetOfSubTomograms
     ]
+    _name = 'Open with TomoViz'
 
     def __init__(self, **kwargs):
         pwviewer.Viewer.__init__(self, **kwargs)
@@ -117,8 +118,7 @@ class TomoVizDataViewer(pwviewer.Viewer):
         tomoProvider = Tomo3DTreeProvider(tomoList)
         viewer = ViewerMRCDialog(self._tkRoot, outputCoords, self.protocol,
                                  provider=tomoProvider,
-                                 allowSelect= False,
-                                 cancelButton=True)
+                                 allowSelect=False)
 
         # For now we only generate 3d coordinates
         if viewer.haveCoordinatesChanged(coordinateFiles) and issubclass(cls, tomo.objects.SetOfCoordinates3D):
