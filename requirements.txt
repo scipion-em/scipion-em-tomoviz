@@ -4,5 +4,5 @@ scipion-em-tomo
 pyvista==0.38.5
 pyvistaqt==0.10.0
 pymeshfix==0.16.0
-scikit-image==0.19
+scikit-image>=0.19
 PyQt5
