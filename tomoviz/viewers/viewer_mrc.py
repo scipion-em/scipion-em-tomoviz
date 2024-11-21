@@ -358,7 +358,7 @@ class MrcPlot(object):
         # Get Only mesh corresponding to a given label (smooth the result to fill holes in the mask)
         if binarize:
             data = data == label
-            data = binary_erosion(binary_dilation(data, selem=ball(4)), selem=ball(1))
+            data = binary_erosion(binary_dilation(data, footprint=ball(4)), footprint=ball(1))
 
             # Triangulate coordinates using marching cubes algorithm
             grid = self.marchingCubes(data)
