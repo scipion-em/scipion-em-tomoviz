@@ -161,7 +161,7 @@ class VtkPlot(object):
             self.vti_actor = None
 
             # We need to check if we have a Net Slice and remove if it exists
-            if self.buttonSliceNet.GetRepresentation().GetState():
+            if self.net and self.buttonSliceNet.GetRepresentation().GetState():
                 self.plt.remove_actor(self.net_slice_actor)
                 self.net_slice_actor = None
                 self.buttonSliceNet.GetRepresentation().SetState(False)
@@ -203,7 +203,7 @@ class VtkPlot(object):
                         # This callback also takes into account the Net Plane
                         # In case it exists, it is update so it matches the current orientation of the
                         # Tomogram Slice
-                        if self.buttonSliceNet.GetRepresentation().GetState():
+                        if self.net and self.buttonSliceNet.GetRepresentation().GetState():
                             alg_net.SetCutFunction(plane)
                             alg_net.Update()
                             idx = self.plane_widgets.index(self.net_slice_actor)
