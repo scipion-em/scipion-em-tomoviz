@@ -348,7 +348,7 @@ class MrcPlot(object):
         grid = pv.StructuredGrid(x, y, z)
 
         # Set the cell values. Previous reordering of the axis was needed to flatten properly the array
-        grid.cell_arrays["values"] = data.flatten(order="K")
+        grid.cell_data["values"] = data.flatten(order="K")
 
         return grid
 
@@ -358,7 +358,7 @@ class MrcPlot(object):
         # Get Only mesh corresponding to a given label (smooth the result to fill holes in the mask)
         if binarize:
             data = data == label
-            data = binary_erosion(binary_dilation(data, selem=ball(4)), selem=ball(1))
+            data = binary_erosion(binary_dilation(data, footprint=ball(4)), footprint=ball(1))
 
             # Triangulate coordinates using marching cubes algorithm
             grid = self.marchingCubes(data)
@@ -386,7 +386,7 @@ class MrcPlot(object):
 
     def marchingCubes(self, volume, level=None, triangulation=True):
         vertices, faces = measure.marching_cubes(volume, spacing=(1, 1, 1), level=level, allow_degenerate=False)[:2]
-        faces = np.column_stack((3 * np.ones((len(faces), 1), dtype=np.int), faces)).flatten()
+        faces = np.column_stack((3 * np.ones((len(faces), 1), dtype=int), faces)).flatten()
         grid = pv.PolyData(vertices.astype(int), faces) if triangulation else pv.PolyData(vertices.astype(int))
         return grid
 
