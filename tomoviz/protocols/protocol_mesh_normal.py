@@ -46,6 +46,48 @@ class TomovizProtFilterbyNormal(EMProtocol, ProtTomoBase):
     """ This protocol takes surfaces or ROIs (SetOfMeshes) and a SetOfSubtomograms or SetOfCoordinates3D with
     transformation matrix and filters them by different criteria related with the normal direction."""
 
+    """
+        Filter by Normal (TomovizProtFilterbyNormal) — User Manual
+
+            Overview
+
+            The Filter by Normal protocol filters subtomograms or 3D
+            coordinates according to geometric criteria related to membrane
+            orientation and particle directionality. Its main purpose is
+            to improve the consistency of cryo-electron tomography datasets
+            by removing particles whose orientations are incompatible with
+            the local membrane geometry or user-defined tilt constraints.
+
+            Inputs and General Workflow
+
+            The protocol requires a set of subtomograms or 3D coordinates
+            with transformation matrices, together with vesicle or membrane
+            meshes used to estimate local surface normals. During execution,
+            particle orientations are compared against the closest membrane
+            normal, and optional tilt angle filtering can also be applied.
+
+            Normal and Tilt Filtering
+
+            The protocol removes particles whose orientation differs from
+            the local vesicle normal beyond a user-defined angular tolerance.
+            It can also exclude particles outside a specified tilt angle
+            range, helping reduce geometrically inconsistent particles and
+            minimizing missing wedge effects.
+
+            Outputs and Interpretation
+
+            After execution, the protocol produces a filtered set of
+            subtomograms or coordinates that preserves the original dataset
+            structure while improving orientation consistency for downstream
+            subtomogram averaging and structural analysis workflows.
+
+            Final Perspective
+
+            TomovizProtFilterbyNormal provides a geometry-based filtering
+            strategy for membrane-associated cryo-electron tomography
+            datasets, helping improve particle quality and structural
+            consistency through normal direction and tilt angle analysis.
+        """
     _label = 'filter by normal'
     _devStatus = BETA
     _possibleOutputs = {OUTPUT_NAME: EMSet}
