@@ -49,6 +49,43 @@ class ProtTomoPickingRemoveDuplicates(ProtTomoConsensusPicking):
     The remaining coordinate is the average of the previous ones.
     """
 
+    """
+        Remove Duplicate Coordinates (ProtTomoPickingRemoveDuplicates) — User Manual
+
+            Overview
+
+            The Remove Duplicate Coordinates protocol eliminates redundant
+            particle coordinates in cryo-electron tomography datasets. Its
+            main purpose is to identify coordinates that are spatially too
+            close to each other and merge them into a single representative
+            particle position.
+
+            Inputs and General Workflow
+
+            The protocol requires a SetOfCoordinates3D containing particle
+            coordinates associated with tomograms. Coordinates located within
+            a user-defined radius are considered duplicates belonging to the
+            same biological particle.
+
+            During execution, nearby coordinates are grouped together and
+            replaced by a consensus coordinate corresponding to the averaged
+            particle position. Transformation matrices associated with the
+            duplicated particles are also preserved and combined.
+
+            Outputs and Interpretation
+
+            The protocol produces a cleaned SetOfCoordinates3D in which
+            duplicated detections have been removed. The resulting coordinate
+            set is more consistent and suitable for downstream subtomogram
+            averaging, classification, or particle refinement workflows.
+
+            Final Perspective
+
+            ProtTomoPickingRemoveDuplicates provides a simple and effective
+            strategy for reducing redundancy in cryo-ET particle picking
+            datasets, improving dataset quality and consistency before
+            downstream structural analysis.
+        """
     _label = 'remove duplicates'
     _devStatus = BETA
     outputName = 'outputCoordinates'
