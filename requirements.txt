@@ -2,6 +2,7 @@ scipion-pyworkflow
 scipion-em >= 3.0.8
 scipion-em-tomo
 pyvista==0.38.5
+vtk==9.2.6
 pyvistaqt==0.10.0
 pymeshfix==0.16.0
 scikit-image>=0.19
